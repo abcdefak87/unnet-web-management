@@ -51,10 +51,10 @@ sudo apt update && sudo apt upgrade -y
 print_status "Installing essential packages..."
 sudo apt install -y curl wget git unzip software-properties-common apt-transport-https ca-certificates gnupg lsb-release
 
-# Install Node.js 18.x
-print_status "Installing Node.js 18.x..."
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
+# Install Node.js 22.x
+print_status "Installing Node.js 22.x..."
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
 # Verify Node.js installation
 NODE_VERSION=$(node --version)
