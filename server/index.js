@@ -5,6 +5,10 @@ const compression = require('compression');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+// Make prisma globally available for routes
+global.prisma = prisma;
+
 const { createServer } = require('http');
 const { initializeWebSocket } = require('./services/websocketService');
 const logger = require('./utils/logger');
