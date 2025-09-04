@@ -1,0 +1,358 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String    @id @default(cuid())
+  name             String
+  email            String    @unique
+  password         String
+  role             String    @default("user")
+  permissions      String?
+  phone            String?
+  isActive         Boolean   @default(true)
+  lastLogin        DateTime?
+  telegramChatId   String?   @unique
+  refreshTokenHash String?   // For refresh token security
+
+  // Relations
+  jobs                  Job[]
+  notifications         Notification[]
+  inventoryLogs         InventoryLog[]
+  createdJobs           Job[]                    @relation("CreatedBy")
+  approvedJobs          Job[]                    @relation("ApprovedBy")
+  rejectedJobs          Job[]                    @relation("RejectedBy")
+  approvedRegistrations TechnicianRegistration[] @relation("ApprovedRegistrations")
+  rejectedRegistrations TechnicianRegistration[] @relation("RejectedRegistrations")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Technician {
+  id                 String    @id @default(cuid())
+  name               String
+  phone              String    @unique
+  telegramChatId     String?   @unique
+  isActive           Boolean   @default(true)
+  isAvailable        Boolean   @default(true)
+  isAdmin            Boolean   @default(false) // Admin role for job creation
+  skills             String? // JSON array of skills
+  lastKnownLat       Float?
+  lastKnownLon       Float?
+  lastLocationUpdate DateTime?
+
+  // Relations
+  jobAssignments JobTechnician[]
+  inventoryLogs  InventoryLog[]
+  roomMessages   TeamRoomMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("technicians")
+}
+
+model Customer {
+  id      String  @id @default(cuid())
+  name    String
+  phone   String
+  address String
+  email   String?
+
+  // KTP Information for new installations
+  ktpName       String? // Nama lengkap sesuai KTP
+  ktpNumber     String? // Nomor KTP
+  ktpAddress    String? // Alamat lengkap sesuai KTP
+  ktpPhotoUrl   String? // URL foto KTP
+  housePhotoUrl String? // URL foto rumah
+  shareLocation String? // Share location/koordinat alamat
+
+  // GPS Coordinates
+  latitude  Float? // GPS Latitude
+  longitude Float? // GPS Longitude
+
+  // Installation status
+  isVerified       Boolean @default(false)
+  installationType String? // NEW_INSTALLATION, RELOCATION, UPGRADE
+
+  // Registration workflow
+  registrationStatus String?   @default("PENDING") // PENDING, APPROVED, REJECTED
+  packageType        String? // 10MBPS, 20MBPS, 50MBPS, 100MBPS
+  registeredAt       DateTime?
+  approvedAt         DateTime?
+  approvedById       String?
+  rejectedAt         DateTime?
+  rejectedById       String?
+  rejectionReason    String?
+
+  // Relations
+  jobs Job[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("customers")
+}
+
+model Job {
+  id             String    @id @default(cuid())
+  jobNumber      String    @unique
+  type           String
+  status         String    @default("OPEN")
+  title          String?
+  description    String?
+  address        String
+  latitude       Float?
+  longitude      Float?
+  priority       String    @default("MEDIUM")
+  scheduledDate  DateTime?
+  assignmentType String    @default("SINGLE") // SINGLE, PRIMARY_SECONDARY, TEAM
+
+  // Job approval workflow
+  approvalStatus  String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedAt      DateTime?
+  approvedById    String?
+  approvedBy      User?     @relation("ApprovedBy", fields: [approvedById], references: [id])
+  rejectedAt      DateTime?
+  rejectedById    String?
+  rejectedBy      User?     @relation("RejectedBy", fields: [rejectedById], references: [id])
+  rejectionReason String?
+
+  // Customer info
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  // Admin who created the job (nullable for system-created jobs)
+  createdById String?
+  createdBy   User?   @relation("CreatedBy", fields: [createdById], references: [id])
+
+  // Installation specific fields
+  housePhotoUrl  String? // Required for installation
+  idCardPhotoUrl String? // Required for installation
+
+  // Repair specific fields
+  problemType String? // Required for repair jobs
+
+  // Completion info
+  completedAt        DateTime?
+  completionPhotoUrl String?
+  completionNotes    String?
+  technicianLocation String? // Share location from technician
+
+  // Relations
+  technicians    JobTechnician[]
+  inventoryUsage InventoryUsage[]
+  notifications  Notification[]
+  teamRoom       TeamRoom?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  User      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+
+  @@map("jobs")
+}
+
+model JobTechnician {
+  id           String @id @default(cuid())
+  jobId        String
+  technicianId String
+  role         String @default("PRIMARY") // PRIMARY, SECONDARY, BACKUP
+
+  job        Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  technician Technician @relation(fields: [technicianId], references: [id])
+
+  assignedAt      DateTime  @default(now())
+  acceptedAt      DateTime?
+  arrivedAt       DateTime?
+  completedAt     DateTime?
+  completionNotes String?
+  customerRating  Int?
+
+  @@unique([jobId, technicianId])
+  @@map("job_technicians")
+}
+
+model Item {
+  id           String  @id @default(cuid())
+  name         String
+  code         String  @unique
+  category     String  @default("KEPERLUAN_BERSAMA") // TEKNISI, KEPERLUAN_BERSAMA, MODEM
+  subcategory  String? // For MODEM: ZTE_V3, ZTE_5G, HUAWEI_5H5, HUAWEI_5V5, VIBERHOME
+  description  String?
+  unit         String  @default("pcs")
+  currentStock Int     @default(0)
+  minStock     Int     @default(0)
+  price        Float   @default(0)
+  location     String?
+  isActive     Boolean @default(true)
+
+  // Batch/Bundle fields for modem management
+  isBatch       Boolean @default(false) // True if this is a batch item
+  batchType     String? // MIXED_MODEM, SINGLE_TYPE, etc.
+  serialNumbers String? // JSON array of serial numbers for tracking
+
+  // Relations
+  inventoryLogs  InventoryLog[]
+  inventoryUsage InventoryUsage[]
+  batchItems     ModemBatchItem[] // Items contained in this batch
+  parentBatch    ModemBatchItem[] @relation("BatchParent")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("items")
+}
+
+// New model for tracking individual modems in batches
+model ModemBatchItem {
+  id           String  @id @default(cuid())
+  batchId      String // Parent batch item ID
+  itemId       String // Individual modem item ID
+  quantity     Int     @default(1)
+  serialNumber String?
+  status       String  @default("AVAILABLE") // AVAILABLE, ASSIGNED, DAMAGED, LOST
+
+  batch Item @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  item  Item @relation("BatchParent", fields: [itemId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([batchId, itemId])
+  @@map("modem_batch_items")
+}
+
+model InventoryLog {
+  id            String  @id @default(cuid())
+  itemId        String
+  userId        String?
+  technicianId  String?
+  type          String // MASUK, KELUAR, KEMBALI, RUSAK
+  quantity      Int
+  previousStock Int?
+  newStock      Int?
+  notes         String?
+  jobId         String? // If related to a job
+
+  // Additional fields for better tracking
+  supplier      String?
+  invoiceNumber String?
+  receivedDate  DateTime?
+  recipient     String?
+  purpose       String?
+  usedDate      DateTime?
+  returnReason  String?
+  returnDate    DateTime?
+  damageReason  String?
+  damageDate    DateTime?
+
+  item       Item        @relation(fields: [itemId], references: [id])
+  user       User?       @relation(fields: [userId], references: [id])
+  technician Technician? @relation(fields: [technicianId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("inventory_logs")
+}
+
+model InventoryUsage {
+  id               String @id @default(cuid())
+  jobId            String
+  itemId           String
+  quantityUsed     Int
+  quantityReturned Int    @default(0)
+  status           String @default("PENDING")
+
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("inventory_usage")
+}
+
+model Notification {
+  id           String    @id @default(cuid())
+  type         String
+  recipient    String // Phone number or user ID
+  message      String
+  status       String    @default("PENDING")
+  jobId        String?
+  userId       String?
+  sentAt       DateTime?
+  errorMessage String?
+
+  job  Job?  @relation(fields: [jobId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notifications")
+}
+
+model TeamRoom {
+  id           String    @id @default(cuid())
+  jobId        String    @unique
+  roomName     String
+  status       String    @default("ACTIVE") // ACTIVE, CLOSED
+  messageCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  closedAt     DateTime?
+
+  // Relations
+  job      Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  messages TeamRoomMessage[]
+
+  @@map("team_rooms")
+}
+
+model TeamRoomMessage {
+  id           String   @id @default(cuid())
+  roomId       String
+  technicianId String
+  messageType  String   @default("TEXT") // TEXT, PHOTO, LOCATION, FILE, SYSTEM
+  content      String
+  metadata     String? // JSON for additional data (coordinates, file info, etc.)
+  timestamp    DateTime @default(now())
+
+  // Relations
+  room       TeamRoom   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  technician Technician @relation(fields: [technicianId], references: [id])
+
+  @@map("team_room_messages")
+}
+
+model TechnicianRegistration {
+  id               String    @id @default(cuid())
+  telegramChatId   String // Removed @unique to allow re-registration
+  telegramUsername String?
+  firstName        String
+  lastName         String?
+  phone            String?
+  status           String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedAt       DateTime?
+  approvedById     String?
+  rejectedAt       DateTime?
+  rejectedById     String?
+  rejectionReason  String?
+
+  // Relations
+  approvedBy User? @relation("ApprovedRegistrations", fields: [approvedById], references: [id])
+  rejectedBy User? @relation("RejectedRegistrations", fields: [rejectedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("technician_registrations")
+}

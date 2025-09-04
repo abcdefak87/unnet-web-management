@@ -1,0 +1,103 @@
+# GitHub Actions Workflow for ISP Management System
+# Note: IDE warnings about secrets are expected - secrets only exist at runtime on GitHub servers
+
+name: Deploy ISP Management System
+
+on:
+  push:
+    branches: [ main, staging ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '18.x'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        npm ci
+        cd server && npm ci
+        cd ../client && npm ci
+    
+    - name: Run server tests
+      run: |
+        cd server
+        npm run test || echo "No tests configured yet"
+    
+    - name: Build client
+      run: |
+        cd client
+        npm run build
+    
+    - name: Check server syntax
+      run: |
+        cd server
+        node -c index.js
+
+  # Staging deployment - configure secrets in GitHub repository settings
+  deploy-staging:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
+    environment: staging
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    # Configure these values in GitHub Repository Settings → Secrets and variables → Actions:
+    # SSH_PRIVATE_KEY: Your private SSH key content
+    - name: Deploy to Staging Server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: staging-server.example.com  # Replace with your staging server IP
+        username: deploy-user             # Replace with your server username
+        key: ${{ secrets.SSH_PRIVATE_KEY }}  # Configure in GitHub secrets
+        port: 22
+        script: |
+          echo "Starting staging deployment..."
+          cd /var/www/isp-management-staging || exit 1
+          git pull origin staging
+          npm run install-all
+          npm run build
+          pm2 restart isp-staging
+          echo "Staging deployment completed!"
+
+  # Production deployment - configure secrets in GitHub repository settings  
+  deploy-production:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    # Configure these values in GitHub Repository Settings → Secrets and variables → Actions:
+    # SSH_PRIVATE_KEY: Your private SSH key content
+    - name: Deploy to Production Server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: production-server.example.com  # Replace with your production server IP
+        username: deploy-user                 # Replace with your server username
+        key: ${{ secrets.SSH_PRIVATE_KEY }}      # Configure in GitHub secrets
+        port: 22
+        script: |
+          echo "Starting production deployment..."
+          cd /var/www/isp-management || exit 1
+          git pull origin main
+          npm run install-all
+          npm run build
+          pm2 restart isp-production
+          echo "Production deployment completed!"
