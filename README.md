@@ -1,5 +1,7 @@
 # 🚀 ISP Management System
 
+> Sistem manajemen lengkap untuk ISP dengan fitur job tracking, customer management, inventory, dan reporting.
+
 Sistem manajemen ISP yang lengkap dengan fitur keamanan tingkat enterprise dan antarmuka modern.
 
 ## 📋 **Fitur Utama**
@@ -71,7 +73,7 @@ isp-management-system/
 ## 🔧 **Requirements**
 
 ### **System Requirements**
-- **Node.js**: 18.x atau lebih tinggi
+- **Node.js**: v16+ 
 - **npm**: 8.x atau lebih tinggi
 - **Database**: SQLite (development) / PostgreSQL (production)
 - **OS**: Windows, macOS, atau Linux
@@ -224,3 +226,9 @@ Jika mengalami masalah:
 
 *Last updated: September 2025*
 *Version: 2.0 with Enhanced Security Features*
+
+## 🚀 Live Demo
+- **URL**: http://172.17.2.3 (Local Network)
+- **Login**: `superadmin` / `super123`
+
+## ✨ Features
