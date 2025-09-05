@@ -1,17 +1,41 @@
-# ISP Management System - Scripts
+# 📁 Scripts Directory
+
+This directory contains all utility scripts, batch files, and development documentation for the ISP Management System.
 
 ## 📁 Available Scripts
 
-### 1. `run-fresh-setup.bat`
-**Purpose:** Setup development environment on Windows
-- Installs all dependencies
-- Sets up database
-- Configures environment variables
+### Development Scripts
 
-**Usage on Windows:**
+#### `dev.bat`
+**Purpose:** Start both frontend and backend servers for development
+```batch
+scripts\dev.bat
+```
+
+#### `test-local.bat`
+**Purpose:** Test local environment setup and dependencies
+```batch
+scripts\test-local.bat
+```
+
+#### `start-dev.bat`
+**Purpose:** Alternative development server starter with browser auto-open
+```batch
+scripts\start-dev.bat
+```
+
+### Setup Scripts
+
+#### `run-fresh-setup.bat`
+**Purpose:** Fresh installation and setup of the entire project
 ```batch
 scripts\run-fresh-setup.bat
 ```
+
+## 📚 Documentation
+
+- **LOCAL_DEV_GUIDE.md** - Complete local development workflow guide
+- **DEVELOPMENT_STATUS.md** - Current development environment status
 
 ## 🚀 Quick Start
 
