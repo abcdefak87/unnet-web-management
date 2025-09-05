@@ -31,29 +31,17 @@ Sistem manajemen ISP yang lengkap dengan fitur keamanan tingkat enterprise dan a
 
 ### **Setup Pertama Kali**
 ```bash
-# 1. Setup environment
-./setup.sh
+# 1. Install dependencies
+npm run install-all
 
-# 2. Edit konfigurasi (jika diperlukan)
-nano server/.env
+# 2. Setup database
+cd server
+npx prisma generate
+npx prisma db push
+cd ..
 
-# 3. Start sistem
-./start.sh
-```
-
-### **Penggunaan Harian**
-```bash
-# Start sistem (dengan waiting)
-./start.sh
-
-# Start sistem (fast mode - 8 detik timeout)
-./start-fast.sh
-
-# Start sistem (instant mode - tidak menunggu)
-./start-instant.sh
-
-# Stop sistem
-./stop.sh
+# 3. Start development
+npm run dev
 ```
 
 ## 📁 **Struktur Project**
@@ -73,20 +61,10 @@ isp-management-system/
 │   ├── 📁 services/          # Business logic
 │   ├── 📁 prisma/            # Database schema
 │   └── 📁 uploads/           # File uploads
-├── 📁 scripts/               # Bash scripts
-│   ├── start-server.sh       # Start system
-│   ├── stop-server.sh        # Stop system
-│   ├── setup-environment.sh  # Environment setup
-│   └── troubleshoot.sh       # Troubleshooting
-├── 📁 docs/                  # Documentation
-│   ├── SECURITY_IMPROVEMENTS.md
-│   ├── BATCH_FILES_README.md
-│   └── BATCH_USAGE_GUIDE.md
-├── start.sh                  # Quick start script (dengan waiting)
-├── start-fast.sh             # Fast start script (8 detik timeout)
-├── start-instant.sh          # Instant start script (tidak menunggu)
-├── stop.sh                   # Quick stop script
-├── setup.sh                  # Quick setup script
+├── 📁 scripts/               # Utility scripts
+│   ├── run-fresh-setup.bat   # Windows setup script
+│   └── README.md             # Scripts documentation
+├── run-setup.bat             # Windows quick setup
 └── README.md                 # This file
 ```
 
@@ -145,19 +123,17 @@ TELEGRAM_BOT_TOKEN="your-telegram-bot-token-here"
 
 ### **Available Scripts**
 ```bash
-# Setup environment
-./setup.sh
+# Install all dependencies
+npm run install-all
 
 # Start development servers
-./start.sh              # Dengan waiting (10 detik backend, 15 detik frontend)
-./start-fast.sh         # Fast mode (8 detik backend, 10 detik frontend)
-./start-instant.sh      # Instant mode (tidak menunggu)
+npm run dev
 
-# Stop all servers
-./stop.sh
+# Build production
+npm run build
 
-# Troubleshooting
-./scripts/troubleshoot.sh
+# Start production server
+npm start
 ```
 
 ### **Manual Commands**
@@ -179,9 +155,7 @@ npx prisma generate        # Generate Prisma client
 
 ## 📚 **Documentation**
 
-- **[Security Features](docs/SECURITY_IMPROVEMENTS.md)** - Dokumentasi lengkap fitur keamanan
-- **[Scripts Guide](docs/BATCH_USAGE_GUIDE.md)** - Panduan penggunaan scripts
-- **[Batch Files](docs/BATCH_FILES_README.md)** - Dokumentasi batch files
+- **[Scripts Guide](scripts/README.md)** - Panduan penggunaan scripts
 
 ## 🔧 **Troubleshooting**
 
@@ -211,46 +185,19 @@ npx prisma generate        # Generate Prisma client
 ./setup.sh
 ```
 
-#### **"Permission denied" (Linux/macOS)**
+#### **"Permission denied" (Windows)**
 ```bash
-# Berikan permission execute
-chmod +x *.sh
-chmod +x scripts/*.sh
+# Run as Administrator
+# Atau gunakan PowerShell dengan elevated privileges
 ```
 
-### **Advanced Troubleshooting**
-```bash
-# Jalankan troubleshooting script
-./scripts/troubleshoot.sh
-
-# Pilih option sesuai masalah:
-# 1. Check system requirements
-# 2. Check server status
-# 3. Check database connection
-# 4. Check environment configuration
-# 5. Clear cache and logs
-# 6. Reset database
-# 7. Check security configuration
-# 8. View system logs
-```
-
-## 🚀 **Production Deployment**
+## 🚀 **Production Build**
 
 ### **Environment Setup**
 1. Set `NODE_ENV=production` di server/.env
 2. Gunakan PostgreSQL untuk database production
 3. Set JWT secrets yang kuat dan unik
-4. Konfigurasi HTTPS dan domain yang benar
-5. Setup reverse proxy (nginx/Apache)
-
-### **Security Checklist**
-- ✅ JWT secrets yang kuat dan unik
-- ✅ HTTPS enabled
-- ✅ CORS origins yang benar
-- ✅ Rate limiting yang sesuai
-- ✅ File upload validation
-- ✅ Database connection secure
-- ✅ Log monitoring aktif
+4. Build frontend dengan `npm run build`
 
 ## 🤝 **Contributing**
 
@@ -267,10 +214,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 **Support**
 
 Jika mengalami masalah:
-1. Cek dokumentasi di folder `docs/`
-2. Jalankan `./scripts/troubleshoot.sh`
-3. Cek logs di `server/logs/`
-4. Buat issue di repository
+1. Cek dokumentasi di folder `scripts/`
+2. Cek logs di `server/logs/`
+3. Restart development server dengan `npm run dev`
 
 ---
 
