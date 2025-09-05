@@ -10,6 +10,7 @@ const getApiBaseUrl = () => {
   
   // In production, use relative URL for same-origin requests
   if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
+    // Use relative path for production (works with Nginx proxy)
     return '/api';
   }
   
