@@ -66,7 +66,7 @@ const fileFilter = (req, file, cb) => {
   }
 
   // Check for path traversal attempts
-  if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+  if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes(path.sep)) {
     return cb(new Error('Invalid file name'));
   }
 

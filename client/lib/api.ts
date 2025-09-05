@@ -2,7 +2,22 @@ import axios from 'axios'
 import Cookies from 'js-cookie'
 import toast from 'react-hot-toast'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.origin ? `${window.location.origin}/api` : 'http://localhost:3001/api');
+const getApiBaseUrl = () => {
+  // First check for environment variable
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  
+  // In production, use relative URL for same-origin requests
+  if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
+    return '/api';
+  }
+  
+  // In development, use localhost
+  return 'http://localhost:3001/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

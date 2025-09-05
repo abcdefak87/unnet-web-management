@@ -23,7 +23,12 @@ class WebSocketService {
     this.isConnecting = true;
 
     try {
-      this.socket = io('http://localhost:3001', {
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
+        (typeof window !== 'undefined' && process.env.NODE_ENV === 'production' 
+          ? window.location.origin 
+          : 'http://localhost:3001');
+      
+      this.socket = io(wsUrl, {
         transports: ['websocket', 'polling'],
         timeout: 20000,
         forceNew: true,
