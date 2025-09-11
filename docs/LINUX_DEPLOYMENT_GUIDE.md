@@ -482,7 +482,20 @@ cd server
 npx prisma studio --port 5556
 ```
 
-### **7. WhatsApp Bot Issues**
+### **7. User Accounts Missing (Cannot Login)**
+```bash
+# Restore user accounts
+chmod +x scripts/restore-users-linux.sh
+./scripts/restore-users-linux.sh
+
+# Or manually restore
+cd server
+npx prisma db seed
+node restore-users.js
+cd ..
+```
+
+### **8. WhatsApp Bot Issues**
 ```bash
 # Check WhatsApp status
 cat scripts/whatsapp-status.json
