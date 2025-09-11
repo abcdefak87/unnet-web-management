@@ -24,7 +24,11 @@ class WebSocketService {
     this.isConnecting = true;
 
     try {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
+      // Use environment variable or fallback to current host with port 3001
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
+        (typeof window !== 'undefined' 
+          ? `${window.location.protocol}//${window.location.hostname}:3001`
+          : 'http://localhost:3001');
       
       const token = Cookies.get('token');
 

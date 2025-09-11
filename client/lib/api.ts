@@ -15,7 +15,12 @@ const getApiBaseUrl = () => {
     return '/api';
   }
   
-  // In development, always use direct localhost URL to avoid rewrite issues
+  // In development, use current host with port 3001 to match server
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}:3001/api`;
+  }
+  
+  // Fallback for server-side rendering
   return 'http://localhost:3001/api';
 };
 

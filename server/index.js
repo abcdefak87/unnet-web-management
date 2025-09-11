@@ -45,7 +45,14 @@ app.use(helmet({
         const wsOrigin = (process.env.WS_ORIGIN || '').trim();
         if (wsOrigin) list.push(wsOrigin);
         if (process.env.NODE_ENV !== 'production') {
-          list.push('http://localhost:3001', 'http://localhost:3000', 'ws://localhost:3001', 'ws://localhost:3000');
+          list.push(
+            'http://localhost:3001', 'http://localhost:3000', 
+            'ws://localhost:3001', 'ws://localhost:3000',
+            'http://172.17.2.3:3001', 'http://172.17.2.3:3000',
+            'ws://172.17.2.3:3001', 'ws://172.17.2.3:3000',
+            'http://127.0.0.1:3001', 'http://127.0.0.1:3000',
+            'ws://127.0.0.1:3001', 'ws://127.0.0.1:3000'
+          );
         }
         list.push('https:','wss:');
         return list;
@@ -67,10 +74,13 @@ app.use(cors({
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
-    // For development, allow all localhost origins
+    // For development, allow all localhost and common development IPs
     if (process.env.NODE_ENV === 'development' || 
         origin.includes('localhost') || 
-        origin.includes('127.0.0.1')) {
+        origin.includes('127.0.0.1') ||
+        origin.includes('172.17.') ||
+        origin.includes('192.168.') ||
+        origin.includes('10.0.')) {
       return callback(null, true);
     }
     

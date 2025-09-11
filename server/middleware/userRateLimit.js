@@ -122,7 +122,7 @@ const rateLimits = {
   // General API requests
   general: createUserRateLimit({
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // 100 requests per 15 minutes
+    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 500, // 500 requests per 15 minutes (increased)
     message: 'Too many API requests, please slow down.'
   }),
 
@@ -165,15 +165,15 @@ const rateLimits = {
 
   // Customer creation
   customerCreation: createUserRateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 30, // 30 customers per hour
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 200, // 200 customer requests per 15 minutes (increased for pagination)
     message: 'Too many customer creation requests, please slow down.'
   }),
 
   // Reports generation
   reports: createUserRateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10, // 10 reports per hour
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // 100 reports per 15 minutes (increased for dashboard)
     message: 'Too many report generation requests, please slow down.'
   }),
 
