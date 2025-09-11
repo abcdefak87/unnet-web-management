@@ -83,7 +83,15 @@ cd ..
 
 print_success "Dependencies updated"
 
-# 4. Database migrations
+# 4. Setup environment if not exists
+print_status "Setting up environment..."
+if [ ! -f "server/.env" ]; then
+    print_warning "No server/.env found, creating from template..."
+    cp server/.env.example server/.env
+    print_success "Environment file created"
+fi
+
+# 5. Database migrations
 print_status "Running database migrations..."
 cd server
 npx prisma generate
@@ -91,23 +99,23 @@ npx prisma db push
 cd ..
 print_success "Database migrations completed"
 
-# 5. Build client for production
+# 6. Build client for production
 print_status "Building client for production..."
 cd client
 npm run build
 cd ..
 print_success "Client built for production"
 
-# 6. Restart PM2 services
+# 7. Restart PM2 services
 print_status "Restarting PM2 services..."
 pm2 restart all
 print_success "All services restarted"
 
-# 7. Show status
+# 8. Show status
 print_status "Current service status:"
 pm2 status
 
-# 8. Show logs (last 10 lines)
+# 9. Show logs (last 10 lines)
 print_status "Recent logs:"
 pm2 logs --lines 10
 

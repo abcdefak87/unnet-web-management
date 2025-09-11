@@ -84,14 +84,62 @@ cd ..
 ```bash
 # Copy environment template
 cp .env.example .env
-cp server/.env.example server/.env
 
-# Edit environment files
+# Create server environment file
+cat > server/.env << 'EOF'
+# ISP Management System - Server Environment Variables
+NODE_ENV=production
+PORT=3001
+
+# Database
+DATABASE_URL="file:./prisma/prod.db"
+
+# JWT Secrets (CHANGE THESE!)
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+JWT_REFRESH_SECRET=your-super-secret-refresh-key-change-this-in-production
+
+# CORS Configuration
+CORS_ORIGIN=http://localhost:3000
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# File Upload
+MAX_FILE_SIZE=10485760
+UPLOAD_PATH=./uploads
+
+# WhatsApp Configuration
+WHATSAPP_SESSION_PATH=./auth_info_baileys
+WHATSAPP_QR_PATH=./public/qr
+
+# Security
+BCRYPT_ROUNDS=10
+SESSION_SECRET=your-session-secret-change-this
+
+# Logging
+LOG_LEVEL=info
+LOG_FILE=./logs/combined.log
+EOF
+
+# Edit environment files if needed
 nano .env
 nano server/.env
 ```
 
-### **4. Database Setup**
+### **4. Fix Vulnerabilities (Important!)**
+```bash
+# Run vulnerability fix script
+chmod +x scripts/fix-vulnerabilities.sh
+./scripts/fix-vulnerabilities.sh
+
+# Or manually fix vulnerabilities
+npm audit fix --force
+cd server && npm audit fix --force && cd ..
+cd client && npm audit fix --force && cd ..
+```
+
+### **5. Database Setup**
 ```bash
 cd server
 
@@ -360,7 +408,45 @@ pm2 set pm2-logrotate:compress true
 
 ## 🚨 **Troubleshooting**
 
-### **1. Service Tidak Start**
+### **1. DATABASE_URL Error**
+```bash
+# Error: Environment variable not found: DATABASE_URL
+# Solution: Create server/.env file
+cat > server/.env << 'EOF'
+DATABASE_URL="file:./prisma/prod.db"
+NODE_ENV=production
+PORT=3001
+JWT_SECRET=your-secret-key
+EOF
+```
+
+### **2. NPM Vulnerabilities**
+```bash
+# Fix all vulnerabilities
+./scripts/fix-vulnerabilities.sh
+
+# Or manually
+npm audit fix --force
+cd server && npm audit fix --force && cd ..
+cd client && npm audit fix --force && cd ..
+```
+
+### **3. Deprecated Packages**
+```bash
+# Update Baileys
+cd server
+npm uninstall @whiskeysockets/baileys
+npm install baileys
+
+# Update Multer
+npm install multer@^2.0.0
+
+# Update ESLint
+cd ../client
+npm install eslint@latest
+```
+
+### **4. Service Tidak Start**
 ```bash
 # Check logs
 pm2 logs
@@ -373,13 +459,13 @@ sudo netstat -tlnp | grep :3001
 df -h
 ```
 
-### **2. Database Issues**
+### **5. Database Issues**
 ```bash
 cd server
 npx prisma studio --port 5556
 ```
 
-### **3. WhatsApp Bot Issues**
+### **6. WhatsApp Bot Issues**
 ```bash
 # Check WhatsApp status
 cat scripts/whatsapp-status.json
