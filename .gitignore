@@ -113,6 +113,12 @@ scripts/server/auth_info_baileys/
 server/public/qr/
 whatsapp-status.json
 
+# Session keys and backup files (sensitive)
+*.session-key
+*.env.backup
+server/.session-key
+server/.env.backup
+
 # Build artifacts
 *.tsbuildinfo
 .next/
