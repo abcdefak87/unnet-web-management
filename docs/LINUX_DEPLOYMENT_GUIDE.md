@@ -420,18 +420,35 @@ JWT_SECRET=your-secret-key
 EOF
 ```
 
-### **2. NPM Vulnerabilities**
+### **2. NPM Vulnerabilities & ESLint Conflicts**
 ```bash
-# Fix all vulnerabilities
+# Fix all vulnerabilities and ESLint conflicts
 ./scripts/fix-vulnerabilities.sh
 
-# Or manually
+# Or manually fix ESLint conflicts
+cd client
+rm -rf node_modules package-lock.json
+npm install --legacy-peer-deps
+cd ..
+
+# Fix vulnerabilities
 npm audit fix --force
 cd server && npm audit fix --force && cd ..
-cd client && npm audit fix --force && cd ..
 ```
 
-### **3. Deprecated Packages**
+### **3. ESLint Dependency Conflict (ERESOLVE)**
+```bash
+# Error: ERESOLVE could not resolve eslint-config-next@14.0.0
+# Solution: Use legacy peer deps
+cd client
+rm -rf node_modules package-lock.json
+npm install --legacy-peer-deps
+
+# Alternative: Force resolution
+npm install --force
+```
+
+### **4. Deprecated Packages**
 ```bash
 # Update Baileys
 cd server
@@ -441,12 +458,12 @@ npm install baileys
 # Update Multer
 npm install multer@^2.0.0
 
-# Update ESLint
+# Update ESLint (if needed)
 cd ../client
-npm install eslint@latest
+npm install eslint@^8.57.1 --legacy-peer-deps
 ```
 
-### **4. Service Tidak Start**
+### **5. Service Tidak Start**
 ```bash
 # Check logs
 pm2 logs
@@ -459,13 +476,13 @@ sudo netstat -tlnp | grep :3001
 df -h
 ```
 
-### **5. Database Issues**
+### **6. Database Issues**
 ```bash
 cd server
 npx prisma studio --port 5556
 ```
 
-### **6. WhatsApp Bot Issues**
+### **7. WhatsApp Bot Issues**
 ```bash
 # Check WhatsApp status
 cat scripts/whatsapp-status.json

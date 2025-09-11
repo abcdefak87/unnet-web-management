@@ -78,7 +78,7 @@ cd ..
 # Client dependencies
 print_status "Installing client dependencies..."
 cd client
-npm install
+npm install --legacy-peer-deps
 cd ..
 
 print_success "Dependencies updated"

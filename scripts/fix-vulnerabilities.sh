@@ -78,12 +78,18 @@ npm install multer@^2.0.0
 cd ..
 print_success "Multer updated to v2"
 
-# Update ESLint to latest
-print_status "Updating ESLint to latest version..."
+# Fix ESLint compatibility issues
+print_status "Fixing ESLint compatibility issues..."
 cd client
-npm install eslint@latest
+
+# Remove node_modules and package-lock.json to clean install
+rm -rf node_modules package-lock.json
+
+# Install with legacy peer deps to resolve conflicts
+npm install --legacy-peer-deps
+
 cd ..
-print_success "ESLint updated to latest version"
+print_success "ESLint compatibility issues fixed"
 
 # 5. Fix Husky
 print_status "Fixing Husky configuration..."
