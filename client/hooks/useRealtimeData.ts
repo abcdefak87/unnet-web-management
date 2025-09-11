@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRealtime } from '../contexts/RealtimeContext'
 import { api } from '../lib/api'
 
@@ -14,9 +14,23 @@ export function useRealtimeData<T>({
   dependencies = [] 
 }: UseRealtimeDataOptions) {
   const [data, setData] = useState<T[]>(initialData)
+  const [total, setTotal] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { isConnected } = useRealtime()
+
+  // Helper function to parse API response
+  const parseResponseData = (response: any) => {
+    const responseData = response.data?.data || response.data
+    const dataArray = Array.isArray(responseData) 
+      ? responseData 
+      : responseData?.jobs || responseData?.customers || responseData?.items || []
+    const totalValue = Array.isArray(responseData)
+      ? responseData.length
+      : (responseData?.total ?? (Array.isArray(dataArray) ? dataArray.length : 0))
+    
+    return { dataArray, totalValue }
+  }
 
   // Fetch initial data
   useEffect(() => {
@@ -26,22 +40,22 @@ export function useRealtimeData<T>({
         setError(null)
         const response = await api.get(endpoint)
         
-        // Handle different response structures
-        const responseData = response.data?.data || response.data
-        const dataArray = Array.isArray(responseData) 
-          ? responseData 
-          : responseData?.jobs || responseData?.customers || responseData?.items || []
-        
+        const { dataArray, totalValue } = parseResponseData(response)
         setData(dataArray)
+        setTotal(totalValue)
       } catch (err: any) {
         console.error(`Failed to fetch data from ${endpoint}:`, err)
         setError(err.response?.data?.error || 'Failed to fetch data')
+        // Set empty data on error to prevent DOM issues
+        setData([])
+        setTotal(0)
       } finally {
         setLoading(false)
       }
     }
 
     fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint, ...dependencies])
 
   // Update data when real-time events occur
@@ -86,15 +100,15 @@ export function useRealtimeData<T>({
       setError(null)
       const response = await api.get(endpoint)
       
-      const responseData = response.data?.data || response.data
-      const dataArray = Array.isArray(responseData) 
-        ? responseData 
-        : responseData?.jobs || responseData?.customers || responseData?.items || []
-      
+      const { dataArray, totalValue } = parseResponseData(response)
       setData(dataArray)
+      setTotal(totalValue)
     } catch (err: any) {
       console.error(`Failed to refetch data from ${endpoint}:`, err)
       setError(err.response?.data?.error || 'Failed to refetch data')
+      // Set empty data on error to prevent DOM issues
+      setData([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
@@ -102,6 +116,7 @@ export function useRealtimeData<T>({
 
   return {
     data,
+    total,
     loading,
     error,
     isConnected,

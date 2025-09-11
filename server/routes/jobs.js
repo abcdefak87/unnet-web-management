@@ -1,19 +1,21 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const { PrismaClient } = require('@prisma/client');
+// PrismaClient imported from utils/database
 const { authenticateToken, requireRole, requirePermission } = require('../middleware/auth');
 const { PERMISSIONS } = require('../utils/permissions');
-const { broadcastNewJob, notifyJobStatusChange } = require('../utils/telegramJobIntegration');
+// WhatsApp Integration (New Modular Structure)
+const WhatsApp = require('../whatsapp');
 const { broadcastJobUpdate } = require('../services/websocketService');
 const { uploadJobPhotos } = require('../middleware/upload');
 
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
 // Get all jobs with filters
-router.get('/', authenticateToken, requirePermission('jobs:view'), [
+router.get('/', authenticateToken, [
   query('status').isIn(['pending', 'assigned', 'in_progress', 'completed', 'cancelled', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
-  query('type').isIn(['installation', 'repair', 'INSTALLATION', 'REPAIR']).optional(),
+  query('type').isIn(['installation', 'repair', 'INSTALLATION', 'REPAIR', 'PSB', 'GANGGUAN']).optional(),
+  query('category').isIn(['PSB', 'GANGGUAN']).optional(),
   query('approvalStatus').isIn(['PENDING', 'APPROVED', 'REJECTED']).optional(),
   query('page').isInt({ min: 1 }).optional(),
   query('limit').isInt({ min: 1, max: 100 }).optional()
@@ -24,12 +26,13 @@ router.get('/', authenticateToken, requirePermission('jobs:view'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { status, type, approvalStatus, page = 1, limit = 20 } = req.query;
+    const { status, type, category, approvalStatus, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
 
     const where = {};
     if (status) where.status = status;
     if (type) where.type = type;
+    if (category) where.category = category;
     if (approvalStatus) where.approvalStatus = approvalStatus;
 
     const [jobs, total] = await Promise.all([
@@ -82,7 +85,7 @@ router.get('/', authenticateToken, requirePermission('jobs:view'), [
     });
   } catch (error) {
     console.error('Get jobs error:', error);
-    res.status(500).json({ error: 'Failed to fetch jobs' });
+    res.status(500).json({ error: 'Gagal mengambil data pekerjaan' });
   }
 });
 
@@ -105,7 +108,7 @@ router.get('/pending-approval', authenticateToken, requireRole(['admin', 'supera
     });
   } catch (error) {
     console.error('Get pending jobs error:', error);
-    res.status(500).json({ error: 'Failed to fetch pending jobs' });
+    res.status(500).json({ error: 'Gagal mengambil data pekerjaan yang menunggu persetujuan' });
   }
 });
 
@@ -126,20 +129,21 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     if (!job) {
       console.log('Job not found:', req.params.id);
-      return res.status(404).json({ error: 'Job not found' });
+      return res.status(404).json({ error: 'Pekerjaan tidak ditemukan' });
     }
 
     console.log('Job found successfully:', job.jobNumber);
     res.json({ job });
   } catch (error) {
     console.error('Get job error details:', error);
-    res.status(500).json({ error: 'Failed to fetch job', details: error.message });
+    res.status(500).json({ error: 'Gagal mengambil data pekerjaan', details: error.message });
   }
 });
 
 // Create new job - SIMPLIFIED VALIDATION
 router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobPhotos, [
-  body('type').isIn(['installation', 'repair', 'INSTALLATION', 'REPAIR']),
+  body('type').isIn(['installation', 'repair', 'INSTALLATION', 'REPAIR', 'PSB', 'GANGGUAN']),
+  body('category').isIn(['PSB', 'GANGGUAN']).optional(),
   body('address').isLength({ min: 1 }).trim(),
   body('description').optional().trim(),
   body('problemType').optional().trim(),
@@ -162,7 +166,7 @@ router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobP
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { type, title, description, problemType, address, customerId, customer, scheduledDate, items = [] } = req.body;
+    const { type, category, title, description, problemType, address, customerId, customer, scheduledDate, items = [] } = req.body;
 
     // Simplified validation - no strict KTP requirements
     console.log('=== SIMPLIFIED JOB CREATION ===');
@@ -177,9 +181,10 @@ router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobP
       });
     }
 
-    // Generate job number
+    // Generate job number based on category
     const jobCount = await prisma.job.count();
-    const jobNumber = `JOB-${Date.now()}-${String(jobCount + 1).padStart(4, '0')}`;
+    const prefix = category === 'PSB' ? 'PSB' : category === 'GANGGUAN' ? 'GNG' : 'JOB';
+    const jobNumber = `${prefix}-${Date.now()}-${String(jobCount + 1).padStart(4, '0')}`;
 
     // Create or find customer
     let customerRecord;
@@ -193,8 +198,16 @@ router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobP
       
       if (!customerRecord) {
         console.log('Customer not found with ID:', customerId);
-        return res.status(400).json({ error: `Customer not found with ID: ${customerId}` });
+        return res.status(400).json({ error: `Pelanggan tidak ditemukan dengan ID: ${customerId}` });
       }
+      
+      // Validate customer data
+      if (!customerRecord.address) {
+        return res.status(400).json({ 
+          error: 'Alamat customer tidak ditemukan. Silakan perbarui data customer terlebih dahulu.'
+        });
+      }
+      
       console.log('Found customer:', customerRecord.name);
     } else if (customer && customer.phone) {
       // Create or find customer by phone
@@ -204,7 +217,7 @@ router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobP
       });
     } else {
       console.log('Missing customer data - customerId:', customerId, 'customer:', !!customer);
-      return res.status(400).json({ error: 'Either customerId or customer data is required' });
+      return res.status(400).json({ error: 'Data customerId atau data customer diperlukan' });
     }
 
     if (!customerRecord) {
@@ -230,13 +243,18 @@ router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobP
       });
     }
 
+    // Determine category and type
+    const jobCategory = category || (type.toUpperCase() === 'PSB' ? 'PSB' : type.toUpperCase() === 'GANGGUAN' ? 'GANGGUAN' : 'PSB');
+    const jobType = type.toUpperCase();
+    
     // Prepare job data
     const jobData = {
       jobNumber,
-      type,
-      title,
-      description: type === 'INSTALLATION' ? description : null,
-      problemType: type === 'REPAIR' ? problemType : null,
+      type: jobType,
+      category: jobCategory,
+      title: title || (jobCategory === 'PSB' ? 'Pemasangan WiFi' : 'Perbaikan Gangguan WiFi'),
+      description: jobCategory === 'PSB' ? description : null,
+      problemType: jobCategory === 'GANGGUAN' ? problemType : null,
       address,
       customerId: customerRecord.id,
       createdById: req.user.id,
@@ -325,14 +343,38 @@ router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobP
       return newJob;
     });
 
-    // NOW broadcast to technicians immediately since job is auto-approved
+    // Use integrated notifier via Notification queue + direct socket
     try {
-      console.log(`🚀 CALLING broadcastNewJob for job ${job.jobNumber}`);
-      const broadcastResult = await broadcastNewJob(job);
-      console.log(`✅ Job ${job.jobNumber} broadcast result:`, broadcastResult);
-    } catch (telegramError) {
-      console.error('❌ Telegram broadcast error:', telegramError);
-      // Don't fail job creation if Telegram fails
+      const mapsLink = job.latitude && job.longitude
+        ? `https://www.google.com/maps?q=${job.latitude},${job.longitude}`
+        : (job.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}` : null);
+      const message = (
+        `🆕 *Tiket Baru ${job.category || job.type}*\n\n` +
+        `🧾 Tiket: ${job.jobNumber}\n` +
+        `👤 Pelanggan: ${job.customer?.name || '-'}\n` +
+        `📞 Kontak: ${job.customer?.phone || '-'}\n` +
+        `📍 Alamat: ${job.address || '-'}\n` +
+        `${mapsLink ? '🗺️ Lokasi: ' + mapsLink + '\n' : ''}` +
+        `⏰ Status: ${job.status}`
+      );
+
+      // Broadcast to all active technicians
+      const techs = await prisma.technician.findMany({ where: { isActive: true } });
+      for (const tech of techs) {
+        const normalizePhone = (p) => {
+          if (!p) return null;
+          let n = p.toString().replace(/\D/g, '');
+          if (n.startsWith('0')) n = '62' + n.substring(1);
+          if (!n.startsWith('62')) n = '62' + n;
+          return n;
+        };
+        const jid = tech.whatsappJid || (normalizePhone(tech.phone) ? `${normalizePhone(tech.phone)}@s.whatsapp.net` : null);
+        if (!jid) continue;
+        await prisma.notification.create({ data: { type: 'WHATSAPP', recipient: jid, message, status: 'PENDING', jobId: job.id } });
+        try { if (global.whatsappSocket && global.whatsappSocket.user) await global.whatsappSocket.sendMessage(jid, { text: message }); } catch (e) {}
+      }
+    } catch (whatsappError) {
+      console.error('WhatsApp integrated broadcast error:', whatsappError);
     }
 
     // Broadcast real-time update to dashboard
@@ -344,7 +386,7 @@ router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobP
 
     res.status(201).json({ 
       success: true,
-      message: 'Job created successfully', 
+      message: 'Pekerjaan berhasil dibuat', 
       data: job 
     });
   } catch (error) {
@@ -353,7 +395,7 @@ router.post('/', authenticateToken, requirePermission('jobs:create'), uploadJobP
     console.error('Error stack:', error.stack);
     console.error('Error details:', error);
     res.status(500).json({ 
-      error: 'Failed to create job',
+      error: 'Gagal membuat pekerjaan',
       details: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -391,16 +433,17 @@ router.put('/:id/status', authenticateToken, [
       }
     });
 
-    res.json({ message: 'Job status updated successfully', job });
+    res.json({ message: 'Status pekerjaan berhasil diperbarui', job });
   } catch (error) {
     console.error('Update job status error:', error);
-    res.status(500).json({ error: 'Failed to update job status' });
+    res.status(500).json({ error: 'Gagal memperbarui status pekerjaan' });
   }
 });
 
-// Assign technicians to job
-router.post('/:id/assign', authenticateToken, requireRole(['admin', 'user']), [
-  body('technicianIds').isArray({ min: 1, max: 2 })
+// Assign technicians to job (admin/superadmin only)
+router.post('/:id/assign', authenticateToken, requireRole(['admin', 'superadmin']), [
+  body('technicianIds').isArray({ min: 1, max: 2 }),
+  body('scheduledDate').optional().isISO8601()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -408,7 +451,7 @@ router.post('/:id/assign', authenticateToken, requireRole(['admin', 'user']), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { technicianIds } = req.body;
+    const { technicianIds, scheduledDate } = req.body;
     const jobId = req.params.id;
 
     // Check if job exists and is assignable
@@ -418,32 +461,32 @@ router.post('/:id/assign', authenticateToken, requireRole(['admin', 'user']), [
     });
 
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      return res.status(404).json({ error: 'Pekerjaan tidak ditemukan' });
     }
 
     if (job.status !== 'OPEN') {
-      return res.status(400).json({ error: 'Job is not available for assignment' });
+      return res.status(400).json({ error: 'Pekerjaan tidak tersedia untuk penugasan' });
     }
 
-    // Remove existing assignments
-    await prisma.jobTechnician.deleteMany({
-      where: { jobId }
-    });
+    // Replace assignments safely: clear and reinsert unique technician IDs
+    const uniqueTechIds = Array.from(new Set(technicianIds));
+    await prisma.jobTechnician.deleteMany({ where: { jobId } });
+    if (uniqueTechIds.length > 0) {
+      await prisma.jobTechnician.createMany({
+        data: uniqueTechIds.map(technicianId => ({ jobId, technicianId }))
+      });
+    }
 
-    // Create new assignments
-    const assignments = technicianIds.map(technicianId => ({
-      jobId,
-      technicianId
-    }));
-
-    await prisma.jobTechnician.createMany({
-      data: assignments
-    });
-
-    // Update job status
+    // Update job status, auto-approve, and optional schedule
     await prisma.job.update({
       where: { id: jobId },
-      data: { status: 'ASSIGNED' }
+      data: {
+        status: 'ASSIGNED',
+        approvalStatus: 'APPROVED',
+        approvedAt: new Date(),
+        approvedById: req.user.id,
+        ...(scheduledDate && { scheduledDate: new Date(scheduledDate) })
+      }
     });
 
     const updatedJob = await prisma.job.findUnique({
@@ -457,6 +500,9 @@ router.post('/:id/assign', authenticateToken, requireRole(['admin', 'user']), [
         }
       }
     });
+    if (!updatedJob) {
+      return res.status(500).json({ error: 'Gagal memuat ulang pekerjaan setelah penugasan' });
+    }
 
     // Broadcast real-time update
     try {
@@ -465,10 +511,280 @@ router.post('/:id/assign', authenticateToken, requireRole(['admin', 'user']), [
       console.error('WebSocket broadcast error:', wsError);
     }
 
-    res.json({ message: 'Technicians assigned successfully', job: updatedJob });
+    // Notify assigned technicians via WhatsApp with full details
+    try {
+      const normalizePhone = (p) => {
+        if (!p) return null;
+        let n = p.toString().replace(/\D/g, '');
+        if (n.startsWith('0')) n = '62' + n.substring(1);
+        if (!n.startsWith('62')) n = '62' + n;
+        return n;
+      };
+
+      const buildMapsLink = (job) => {
+        if (job.latitude && job.longitude) {
+          return `https://www.google.com/maps?q=${job.latitude},${job.longitude}`;
+        }
+        if (job.address) {
+          const q = encodeURIComponent(job.address);
+          return `https://www.google.com/maps/search/?api=1&query=${q}`;
+        }
+        return null;
+      };
+
+      const mapsLink = buildMapsLink(updatedJob);
+      const detailText = (techName) => (
+        `📢 *Penugasan Tiket ${updatedJob.category || updatedJob.type}*\n\n` +
+        `👤 Pelanggan: ${updatedJob.customer?.name || '-'}\n` +
+        `📞 Kontak: ${updatedJob.customer?.phone || '-'}\n` +
+        `📍 Alamat: ${updatedJob.address || '-'}\n` +
+        `${mapsLink ? '🗺️ Lokasi: ' + mapsLink + '\n' : ''}` +
+        `${updatedJob.scheduledDate ? '⏰ Jadwal: ' + new Date(updatedJob.scheduledDate).toLocaleString('id-ID') + '\n' : ''}` +
+        `🔧 Ditugaskan kepada: ${techName}\n` +
+        `🧾 Tiket: ${updatedJob.jobNumber}`
+      );
+
+      for (const jt of updatedJob.technicians || []) {
+        const tech = jt.technician;
+        if (!tech) continue;
+        const jid = tech.whatsappJid || (normalizePhone(tech.phone) ? `${normalizePhone(tech.phone)}@s.whatsapp.net` : null);
+        if (!jid) continue;
+
+        // Queue notification in DB (processed by bot)
+        await prisma.notification.create({
+          data: {
+            type: 'WHATSAPP',
+            recipient: jid,
+            message: detailText(tech.name || 'Teknisi'),
+            status: 'PENDING',
+            jobId
+          }
+        });
+
+        // Try direct send if socket exists (non-blocking)
+        try {
+          if (global.whatsappSocket && global.whatsappSocket.user) {
+            await global.whatsappSocket.sendMessage(jid, { text: detailText(tech.name || 'Teknisi') });
+          }
+        } catch (e) {
+          console.warn('Direct WA send failed (assign notify):', e.message);
+        }
+      }
+
+      // Notify customer confirmation via WhatsApp
+      try {
+        const custPhone = updatedJob.customer?.phone ? normalizePhone(updatedJob.customer.phone) : null;
+        if (custPhone) {
+          const custJid = `${custPhone}@s.whatsapp.net`;
+          const assignedTechs = (updatedJob.technicians || []).map(jt => jt.technician?.name).filter(Boolean).join(', ');
+          const customerMsg = (
+            `✅ *Tiket Anda Sedang Diproses*\n\n` +
+            `🧾 Tiket: ${updatedJob.jobNumber}\n` +
+            `🔧 Teknisi: ${assignedTechs || '-'}\n` +
+            `${updatedJob.scheduledDate ? '⏰ Jadwal: ' + new Date(updatedJob.scheduledDate).toLocaleString('id-ID') + '\n' : ''}` +
+            `${mapsLink ? '🗺️ Lokasi: ' + mapsLink + '\n' : ''}` +
+            `📍 Alamat: ${updatedJob.address || '-'}\n\n` +
+            `Mohon siapkan lokasi/akses agar teknisi dapat bekerja dengan lancar.`
+          );
+
+          await prisma.notification.create({
+            data: {
+              type: 'WHATSAPP',
+              recipient: custJid,
+              message: customerMsg,
+              status: 'PENDING',
+              jobId
+            }
+          });
+
+          try {
+            if (global.whatsappSocket && global.whatsappSocket.user) {
+              await global.whatsappSocket.sendMessage(custJid, { text: customerMsg });
+            }
+          } catch (e) {
+            console.warn('Direct WA send failed (customer notify):', e.message);
+          }
+        }
+      } catch (custErr) {
+        console.warn('Customer WhatsApp notify error:', custErr.message);
+      }
+    } catch (notifyErr) {
+      console.error('WhatsApp notify on assign error:', notifyErr);
+    }
+
+    res.json({ message: 'Teknisi berhasil ditugaskan', job: updatedJob });
   } catch (error) {
     console.error('Assign technicians error:', error);
-    res.status(500).json({ error: 'Failed to assign technicians' });
+    res.status(500).json({ error: 'Gagal menugaskan teknisi' });
+  }
+});
+
+// Technician confirm assignment (accept/decline)
+router.post('/:id/confirm', authenticateToken, requireRole(['user', 'technician', 'admin', 'superadmin']), [
+  body('action').isIn(['ACCEPT', 'DECLINE'])
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { action } = req.body;
+    const jobId = req.params.id;
+
+    // Fetch job with assignments
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      include: {
+        technicians: { include: { technician: true } },
+        customer: true
+      }
+    });
+
+    if (!job) {
+      return res.status(404).json({ error: 'Pekerjaan tidak ditemukan' });
+    }
+
+    if (job.status !== 'ASSIGNED') {
+      return res.status(400).json({ error: 'Pekerjaan tidak dalam status DITUGASKAN' });
+    }
+
+    // Determine acting technician (for role user). Admin/superadmin may confirm for any.
+    let actingTechnicianId = null;
+    if (req.user.role === 'user') {
+      // Match user.phone to technician.phone
+      if (!req.user.phone) {
+        return res.status(403).json({ error: 'Identitas teknisi tidak terhubung dengan pengguna' });
+      }
+      const technician = await prisma.technician.findUnique({ where: { phone: req.user.phone } });
+      if (!technician) {
+        return res.status(403).json({ error: 'Data teknisi tidak ditemukan untuk pengguna saat ini' });
+      }
+      actingTechnicianId = technician.id;
+
+      // Ensure this technician is assigned to the job
+      const isAssigned = job.technicians.some(t => t.technicianId === actingTechnicianId);
+      if (!isAssigned) {
+        return res.status(403).json({ error: 'Anda tidak ditugaskan untuk pekerjaan ini' });
+      }
+    }
+
+    if (action === 'ACCEPT') {
+      // Mark acceptedAt for all assigned or for the acting tech
+      if (actingTechnicianId) {
+        await prisma.jobTechnician.update({
+          where: { jobId_technicianId: { jobId, technicianId: actingTechnicianId } },
+          data: { acceptedAt: new Date() }
+        });
+      } else {
+        // Admin confirms on behalf of all assigned technicians
+        await prisma.jobTechnician.updateMany({
+          where: { jobId },
+          data: { acceptedAt: new Date() }
+        });
+      }
+
+      // Keep status ASSIGNED until start
+      const updatedJob = await prisma.job.findUnique({
+        where: { id: jobId },
+        include: { technicians: { include: { technician: true } }, customer: true }
+      });
+
+      try { broadcastJobUpdate(updatedJob, 'CONFIRMED'); } catch (e) { console.error('WS error confirm:', e); }
+      return res.json({ message: 'Penugasan diterima', job: updatedJob });
+    }
+
+    // DECLINE
+    if (actingTechnicianId) {
+      await prisma.jobTechnician.delete({ where: { jobId_technicianId: { jobId, technicianId: actingTechnicianId } } });
+    } else {
+      // Admin declines on behalf: clear all assignments
+      await prisma.jobTechnician.deleteMany({ where: { jobId } });
+    }
+
+    // If no technicians left, set job back to OPEN
+    const remaining = await prisma.jobTechnician.count({ where: { jobId } });
+    const jobAfter = await prisma.job.update({
+      where: { id: jobId },
+      data: { status: remaining > 0 ? 'ASSIGNED' : 'OPEN' },
+      include: { technicians: { include: { technician: true } }, customer: true }
+    });
+
+    try { broadcastJobUpdate(jobAfter, 'DECLINED'); } catch (e) { console.error('WS error decline:', e); }
+    return res.json({ message: 'Penugasan ditolak', job: jobAfter });
+  } catch (error) {
+    console.error('Confirm assignment error:', error);
+    res.status(500).json({ error: 'Gagal mengonfirmasi penugasan' });
+  }
+});
+
+// Self-assign job (technician/user picks an OPEN job)
+router.post('/:id/self-assign', authenticateToken, requireRole(['user', 'technician']), async (req, res) => {
+  try {
+    const jobId = req.params.id;
+
+    // Load job with current assignments
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      include: { technicians: true, customer: true }
+    });
+
+    if (!job) {
+      return res.status(404).json({ error: 'Pekerjaan tidak ditemukan' });
+    }
+
+    if (job.category !== 'PSB') {
+      return res.status(400).json({ error: 'Penugasan mandiri hanya diperbolehkan untuk tiket PSB' });
+    }
+
+    if (job.status !== 'OPEN' && job.status !== 'ASSIGNED') {
+      return res.status(400).json({ error: 'Pekerjaan tidak tersedia untuk penugasan mandiri' });
+    }
+
+    // Resolve current user -> technician
+    const userPhone = req.user.phone || req.user.whatsappNumber;
+    if (!userPhone) {
+      return res.status(403).json({ error: 'Akun pengguna tidak terhubung dengan nomor telepon teknisi' });
+    }
+    const normalizedPhone = userPhone.replace(/\D/g, '').replace(/^0/, '62').startsWith('62') ? userPhone.replace(/\D/g, '').replace(/^0/, '62') : '62' + userPhone.replace(/\D/g, '');
+    const technician = await prisma.technician.findFirst({ where: { phone: normalizedPhone } });
+    if (!technician) {
+      return res.status(403).json({ error: 'Data teknisi tidak ditemukan untuk pengguna saat ini' });
+    }
+
+    // Check if already assigned
+    const alreadyAssigned = job.technicians.some(t => t.technicianId === technician.id);
+    if (alreadyAssigned) {
+      return res.status(400).json({ error: 'Anda sudah ditugaskan untuk pekerjaan ini' });
+    }
+
+    // Limit to max 2 technicians
+    if (job.technicians.length >= 2) {
+      return res.status(400).json({ error: 'Pekerjaan ini sudah memiliki maksimal teknisi' });
+    }
+
+    // Create assignment
+    await prisma.jobTechnician.create({
+      data: {
+        jobId,
+        technicianId: technician.id,
+        role: job.technicians.length === 0 ? 'PRIMARY' : 'SECONDARY'
+      }
+    });
+
+    // Update job status to ASSIGNED if it was OPEN
+    const updatedJob = await prisma.job.update({
+      where: { id: jobId },
+      data: { status: 'ASSIGNED' },
+      include: { technicians: { include: { technician: true } }, customer: true }
+    });
+
+    try { broadcastJobUpdate(updatedJob, 'SELF_ASSIGNED'); } catch (e) { console.error('WS error self-assign:', e); }
+
+    res.json({ message: 'Berhasil mengambil tiket', job: updatedJob });
+  } catch (error) {
+    console.error('Self-assign error:', error);
+    res.status(500).json({ error: 'Failed to self-assign job' });
   }
 });
 
@@ -528,7 +844,7 @@ router.put('/:id/approve', authenticateToken, requireRole(['admin', 'superadmin'
     });
 
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      return res.status(404).json({ error: 'Pekerjaan tidak ditemukan' });
     }
 
     if (job.approvalStatus !== 'PENDING') {
@@ -551,14 +867,7 @@ router.put('/:id/approve', authenticateToken, requireRole(['admin', 'superadmin'
       }
     });
 
-    // NOW broadcast to technicians via Telegram
-    try {
-      await broadcastNewJob(updatedJob);
-      console.log(`Job ${updatedJob.jobNumber} approved and broadcasted to technicians`);
-    } catch (telegramError) {
-      console.error('Telegram broadcast error:', telegramError);
-      // Don't fail the approval if Telegram fails
-    }
+    // Skip legacy WhatsApp.getWhatsAppClient broadcasting; using integrated notifier elsewhere
 
     // Broadcast real-time update to dashboard
     try {
@@ -569,12 +878,12 @@ router.put('/:id/approve', authenticateToken, requireRole(['admin', 'superadmin'
 
     res.json({ 
       success: true,
-      message: 'Job approved and broadcasted to technicians', 
+      message: 'Pekerjaan disetujui dan disiarkan ke teknisi', 
       data: updatedJob 
     });
   } catch (error) {
     console.error('Approve job error:', error);
-    res.status(500).json({ error: 'Failed to approve job' });
+    res.status(500).json({ error: 'Gagal menyetujui pekerjaan' });
   }
 });
 
@@ -597,7 +906,7 @@ router.put('/:id/reject', authenticateToken, requireRole(['admin', 'superadmin']
     });
 
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      return res.status(404).json({ error: 'Pekerjaan tidak ditemukan' });
     }
 
     if (job.approvalStatus !== 'PENDING') {
@@ -630,12 +939,12 @@ router.put('/:id/reject', authenticateToken, requireRole(['admin', 'superadmin']
 
     res.json({ 
       success: true,
-      message: 'Job rejected', 
+      message: 'Pekerjaan ditolak', 
       data: updatedJob 
     });
   } catch (error) {
     console.error('Reject job error:', error);
-    res.status(500).json({ error: 'Failed to reject job' });
+    res.status(500).json({ error: 'Gagal menolak pekerjaan' });
   }
 });
 
@@ -675,10 +984,10 @@ router.delete('/:id', authenticateToken, requirePermission('jobs:delete'), async
       console.error('WebSocket broadcast error for job deletion:', wsError);
     }
 
-    res.json({ message: 'Job deleted successfully' });
+    res.json({ message: 'Pekerjaan berhasil dihapus' });
   } catch (error) {
     console.error('Delete job error:', error);
-    res.status(500).json({ error: 'Failed to delete job' });
+    res.status(500).json({ error: 'Gagal menghapus pekerjaan' });
   }
 });
 
@@ -742,12 +1051,12 @@ router.put('/:id', authenticateToken, requirePermission('jobs:edit'), uploadJobP
 
     res.json({ 
       success: true,
-      message: 'Job updated successfully', 
+      message: 'Pekerjaan berhasil diperbarui', 
       data: updatedJob 
     });
   } catch (error) {
     console.error('Update job error:', error);
-    res.status(500).json({ error: 'Failed to update job' });
+    res.status(500).json({ error: 'Gagal memperbarui pekerjaan' });
   }
 });
 

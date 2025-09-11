@@ -4,18 +4,26 @@ const nextConfig = {
   swcMinify: true,
   images: {
     domains: ['localhost'],
+    formats: ['image/webp', 'image/avif'],
+  },
+  // Bundle optimization
+  experimental: {
+    webpackBuildWorker: true,
+    optimizeCss: true,
+    optimizePackageImports: ['lucide-react', 'recharts', 'react-hook-form'],
+  },
+  // Compiler optimizations
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
   },
   async rewrites() {
-    // Only apply rewrites in development
-    if (process.env.NODE_ENV === 'development') {
-      return [
-        {
-          source: '/api/:path*',
-          destination: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/:path*',
-        },
-      ];
-    }
-    return [];
+    // Apply rewrites in both development and production
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:3001/api/:path*',
+      },
+    ];
   },
   // Suppress router errors in development
   onDemandEntries: {
@@ -24,25 +32,58 @@ const nextConfig = {
     // number of pages that should be kept simultaneously without being disposed
     pagesBufferLength: 2,
   },
-  // Custom webpack config to handle router errors
+  // Custom webpack config for bundle optimization
   webpack: (config, { dev, isServer }) => {
-    if (dev && !isServer) {
-      // Suppress router abort errors in development
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          ...config.optimization.splitChunks,
-          cacheGroups: {
-            ...config.optimization.splitChunks?.cacheGroups,
-            default: {
-              ...config.optimization.splitChunks?.cacheGroups?.default,
-              minChunks: 1,
-            },
+    // Enhanced bundle splitting for better performance
+    config.optimization = {
+      ...config.optimization,
+      splitChunks: {
+        ...config.optimization.splitChunks,
+        chunks: 'all',
+        cacheGroups: {
+          ...config.optimization.splitChunks?.cacheGroups,
+          // Vendor chunks
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            chunks: 'all',
+            priority: 10,
+          },
+          // Lucide React icons
+          lucide: {
+            test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+            name: 'lucide',
+            chunks: 'all',
+            priority: 20,
+          },
+          // Recharts
+          recharts: {
+            test: /[\\/]node_modules[\\/]recharts[\\/]/,
+            name: 'recharts',
+            chunks: 'all',
+            priority: 20,
+          },
+          // React Query
+          reactQuery: {
+            test: /[\\/]node_modules[\\/]@tanstack[\\/]/,
+            name: 'react-query',
+            chunks: 'all',
+            priority: 20,
+          },
+          // Common chunks
+          common: {
+            name: 'common',
+            minChunks: 2,
+            chunks: 'all',
+            priority: 5,
+            reuseExistingChunk: true,
           },
         },
-      }
-      
-      // Add plugin to suppress specific errors
+      },
+    }
+
+    if (dev && !isServer) {
+      // Add plugin to suppress specific errors in development
       config.plugins = config.plugins || []
       config.plugins.push(
         new (require('webpack')).DefinePlugin({
@@ -50,11 +91,8 @@ const nextConfig = {
         })
       )
     }
+    
     return config
-  },
-  // Enable webpack build worker and remove invalid options
-  experimental: {
-    webpackBuildWorker: true,
   },
 }
 

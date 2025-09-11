@@ -117,21 +117,21 @@ export default function Inventory() {
             <div className="mt-4 sm:mt-0 sm:ml-4 flex flex-wrap gap-2">
               <button
                 onClick={() => setShowScannerModal(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center"
+                className="btn-primary"
               >
                 <Scan className="h-5 w-5 mr-2" />
                 Scan Masuk
               </button>
               <button
                 onClick={() => setShowSmartOutModal(true)}
-                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center"
+                className="btn-danger"
               >
                 <Scan className="h-5 w-5 mr-2" />
                 Smart Keluar
               </button>
               <button
                 onClick={() => setShowReturnModal(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center"
+                className="btn-success"
               >
                 <Scan className="h-5 w-5 mr-2" />
                 Smart Kembali
@@ -437,10 +437,6 @@ export default function Inventory() {
                         {subcategory.replace('_', ' ')}
                       </h4>
                       <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Items:</span>
-                          <span className="font-semibold">{modemItems.length}</span>
-                        </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Stok:</span>
                           <span className="font-semibold">{totalStock}</span>

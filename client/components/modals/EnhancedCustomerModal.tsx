@@ -739,7 +739,7 @@ export default function EnhancedCustomerModal({
                           <li>• Tunggu 2-3 menit untuk lock satelit</li>
                           <li>• Matikan VPN jika aktif</li>
                           <li>• Gunakan data seluler, bukan WiFi</li>
-                          <li>• Aktifkan "High Accuracy" di pengaturan lokasi</li>
+                          <li>• Aktifkan &quot;High Accuracy&quot; di pengaturan lokasi</li>
                         </ul>
                         <div className="mt-2 pt-2 border-t border-yellow-300">
                           <div className="text-xs text-yellow-700 mb-2">

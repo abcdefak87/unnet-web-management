@@ -184,7 +184,7 @@ export default function InventoryOutModal({ isOpen, onClose, onSuccess }: Invent
                 className="form-input"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Untuk modem, gunakan "Smart Keluar" (tombol merah)
+                Untuk modem, gunakan &quot;Smart Keluar&quot; (tombol merah)
               </p>
               
               <select

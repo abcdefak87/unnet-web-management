@@ -1,13 +1,13 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const { PrismaClient } = require('@prisma/client');
+// PrismaClient imported from utils/database
 const { authenticateToken, requireRole, requirePermission } = require('../middleware/auth');
 const { PERMISSIONS } = require('../utils/permissions');
 const { broadcastInventoryUpdate } = require('../services/websocketService');
 const { cacheConfigs, invalidateCache } = require('../middleware/cache');
 
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
 // Get all items with stock info (with caching)
 router.get('/items', 

@@ -1,0 +1,198 @@
+## Project Overview
+- **App**: Next.js 14 (TypeScript, Tailwind) in `client/`
+- **API**: Node.js/Express + Prisma in `server/`
+- **DB**: SQLite (dev) via Prisma at `server/prisma/dev.db`
+- **Realtime**: Socket.IO (client `client/lib/websocket.ts`, server `server/services/websocketService.js`)
+- **WhatsApp**: Baileys in `server/services/whatsapp/` with session files in `server/auth_info_baileys/`
+
+## Monorepo Structure
+- **Client**: `client/`
+  - Pages: `client/pages/**`
+  - Components: `client/components/**`
+  - Lib: `client/lib/**`
+  - Styles: `client/styles/globals.css` (Tailwind)
+  - Config: `client/next.config.js`, `client/tsconfig.json`
+- **Server**: `server/`
+  - Entry: `server/index.js`
+  - Routes: `server/routes/**`
+  - Middleware: `server/middleware/**`
+  - Prisma: `server/prisma/schema.prisma`, migrations, seed scripts
+  - Services: `server/services/**`, `server/whatsapp.js`
+  - Logs: `server/logs/**`
+
+## How to Run (Dev)
+- Client (Next.js):
+  - Windows Git Bash: `cd client && npm install && npm run dev`
+  - Serves at `http://localhost:3000`
+- Server (Express):
+  - `cd server && npm install && npm run dev`
+  - API at `http://localhost:3001`
+- Next.js dev proxy: `client/next.config.js` rewrites `/api/*` → `http://localhost:3001/api/*` in development.
+
+## Database & Prisma
+- SQLite URL is read from `server/.env` as `DATABASE_URL` (default expected `file:./dev.db`).
+- Migrations:
+  - `cd server && npm run db:migrate` (dev) or `npm run db:deploy` (prod)
+  - Push (schema only): `npm run db:push`
+  - Generate client: `npm run db:generate`
+  - Seed: `npm run db:seed`
+- Studio: `cd server && npm run db:studio`
+
+## Environment Variables
+- Create `client/.env.local` and `server/.env` when needed.
+- Do NOT commit secrets.
+- Typical server vars:
+  - `PORT=3001`
+  - `DATABASE_URL="file:./dev.db"`
+  - `JWT_SECRET=change_me`
+  - `NODE_ENV=development`
+  - WhatsApp/Baileys-related values should not be hardcoded; sessions live in `server/auth_info_baileys/`.
+
+## Guardrails (Do/Don't)
+- Do:
+  - Keep Typescript strict (see `client/tsconfig.json`).
+  - Use existing API patterns (`server/routes/**`, response shapes, error handling via `@hapi/boom`).
+  - Use Socket.IO already wired on both client/server sides.
+  - Follow Tailwind and component structure in `client/components/**`.
+  - Keep Next.js rewrites aligned with port 3001.
+- Don't:
+  - Do not modify or commit WhatsApp session files format/contents: `server/auth_info_baileys/**`, `scripts/server/auth_info_baileys/**`.
+  - Do not expose secrets or move session files to the client.
+  - Do not introduce breaking changes to public API routes without updating corresponding client calls in `client/lib/api.ts`.
+
+## Code Style & Quality
+- Lint: Next ESLint config (`eslint-config-next`). Run `cd client && npm run lint`.
+- Formatting: match existing style; prefer multi-line clarity over clever one-liners.
+- TypeScript:
+  - Keep `strict: true` for client.
+  - Add explicit types on exported functions and module boundaries.
+- Control flow:
+  - Prefer early returns; handle errors first; avoid deep nesting.
+- Comments: add concise comments for non-obvious logic only (especially in server routes/services and complex UI flows).
+
+## API Conventions (Server)
+- Base path: `/api/*` from `server/index.js` and `server/routes/**`.
+- Use middlewares in `server/middleware/**` (auth, security, rate limit, cache) consistently.
+- Prisma models live in `server/prisma/schema.prisma`. When changing schema:
+  1) update schema, 2) run migrate/generate, 3) update services/routes, 4) update client types if applicable.
+
+## Realtime & WebSocket
+- Use the existing Socket.IO service (`server/services/websocketService.js`).
+- Client connects via `client/lib/websocket.ts`. Keep event names and payloads consistent.
+
+## WhatsApp Integration
+- Baileys logic is in `server/services/whatsapp/**` and `server/whatsapp.js`.
+- Session and QR files are in `server/auth_info_baileys/**` and `server/public/qr/**`.
+- Treat session files as sensitive; read-only unless working explicitly on WhatsApp features.
+
+## File/Folder Ownership
+- Read-only unless necessary:
+  - `server/auth_info_baileys/**`
+  - `server/public/qr/**`
+  - `server/logs/**`
+- Safe to modify for features/bugfixes:
+  - Client: `client/components/**`, `client/pages/**`, `client/lib/**`
+  - Server: `server/routes/**`, `server/middleware/**`, `server/services/**`, `server/utils/**`
+
+## Common Tasks (Recipes)
+- Add a new API route:
+  - Create handler in `server/routes/<feature>.js` and mount in `server/index.js`.
+  - Add validation via `express-validator` where appropriate.
+  - Update client calls in `client/lib/api.ts`.
+- Add a new page/component:
+  - Page under `client/pages/...`, component under `client/components/...`.
+  - Wire data via `client/lib/api.ts` and React Query if needed.
+- Update Prisma schema:
+  - Edit `server/prisma/schema.prisma` → `npm run db:migrate` → `npm run db:generate`.
+
+## Performance & Reliability
+- Client: memoize expensive components; avoid unnecessary state in `Layout` and heavy pages; use React Query for async data.
+- Server: use caching middleware where available; avoid blocking operations in request handlers; log via `winston`/`pino` as configured.
+
+## Testing & Verification
+- Manual testing paths:
+  - Client UI at `http://localhost:3000` (ensure API proxy works).
+  - API at `http://localhost:3001/api/*`.
+  - Prisma Studio for DB inspection.
+- If introducing breaking changes, add minimal integration checks in affected routes/components.
+
+## Security
+- Keep authentication middleware enabled for protected routes.
+- Sanitize inputs with `express-validator`.
+- Never log sensitive data; ensure logs live in `server/logs/**`.
+
+## Commit Guidance
+- Group edits logically by feature.
+- Summaries: mention client/server scope, DB changes, and any WhatsApp-affecting edits.
+
+## Cursor Assistant Rules
+- Prefer small, targeted edits with clear diffs. Avoid wide refactors.
+- Before changing API contracts, search and update all client usages.
+- When adding deps, install in the correct workspace (`client/` vs `server/`).
+- When uncertain about WhatsApp session handling, do not modify; request confirmation.
+- Use Windows-friendly commands (Git Bash) in examples.
+
+## Aturan Operasional Cursor AI (Bahasa Indonesia)
+
+### 1) Prinsip Eksplorasi Kode
+- Selalu mulai dengan pencarian semantik di seluruh repo untuk memahami alur besar (auth, routing API, websocket, Prisma). Setelah itu, persempit ke folder terkait.
+- Gunakan pencarian lintas file untuk: definisi route di `server/routes/**`, event Socket.IO di `server/services/websocketService.js` dan `client/lib/websocket.ts`, serta pemanggilan API client di `client/lib/api.ts`.
+- Jika perlu teks persis/simbol, baru gunakan pencarian exact string.
+- Paralelkan beberapa pencarian/inspeksi file yang independen agar lebih cepat.
+
+### 2) Kebijakan Edit Kode
+- Lakukan edit kecil, terarah, dan mudah ditinjau. Hindari refactor lebar tanpa kebutuhan kuat.
+- Jangan ubah kontrak API publik tanpa memperbarui semua pemakaian di `client/lib/api.ts` dan komponen terkait.
+- Saat menambah route API: buat handler di `server/routes/<fitur>.js`, mount di `server/index.js`, tambah validasi `express-validator`, dan bentuk respons konsisten (gunakan `@hapi/boom` untuk error).
+- Ikuti gaya kode dan TypeScript yang ada: `strict: true`, tipe eksplisit pada boundary (ekspor fungsi, handler API, util umum).
+
+### 3) Workflow Prisma (Wajib)
+- Ubah skema di `server/prisma/schema.prisma` → jalankan `cd server && npm run db:migrate` (dev) → `npm run db:generate`.
+- Jika hanya sinkronisasi tanpa migrasi, gunakan `npm run db:push` (dev). Untuk produksi gunakan `npm run db:deploy`.
+- Setelah skema berubah, perbarui service/route yang terdampak dan tipe di client jika relevan.
+
+### 4) Next.js Client
+- Jalankan dev dengan `cd client && npm run dev` pada `http://localhost:3000`.
+- Pastikan proxy dev `/api/*` → `http://localhost:3001/api/*` berfungsi (lihat `client/next.config.js`).
+- Gunakan React Query untuk data async, memoize komponen berat, dan minimalkan state global yang tidak perlu.
+
+### 5) Realtime & WebSocket
+- Sumber kebenaran event berada di `server/services/websocketService.js` dan `client/lib/websocket.ts`.
+- Pertahankan nama event dan bentuk payload konsisten. Dokumentasikan event baru di komentar singkat.
+- Hindari side-effect berat di handler event; delegasikan ke service bila perlu.
+
+### 6) Keamanan & WhatsApp
+- Jangan pernah memindah/mengekspos file sesi Baileys: `server/auth_info_baileys/**` dan QR di `server/public/qr/**`.
+- Perlakukan file tersebut read-only kecuali fitur WhatsApp sedang dikerjakan dan ada justifikasi jelas.
+- Jangan log data sensitif. Gunakan logger yang sudah dikonfigurasi (`winston`/`pino`) ke `server/logs/**`.
+- Gunakan middleware auth/security/rate-limit/cache secara konsisten.
+
+### 7) Manajemen Dependensi
+- Tambah dependensi pada workspace yang benar: UI di `client/`, API/Prisma/WhatsApp di `server/`.
+- Gunakan versi semver yang kompatibel dengan yang ada; hindari upgrade mayor tanpa alasan jelas.
+
+### 8) Lint, Tipe, dan Kualitas
+- Jalankan linting client: `cd client && npm run lint`. Perbaiki error sebelum commit.
+- Pertahankan `strict` TypeScript di client; tambahkan tipe pada boundary publik.
+- Gunakan early return untuk alur kontrol; hindari nesting dalam.
+
+### 9) Pengujian Manual Cepat
+- UI: `http://localhost:3000` dan alur yang terdampak (form, tabel, modals).
+- API: `http://localhost:3001/api/*` dengan tool apa pun (browser/REST client).
+- DB: verifikasi di Prisma Studio `cd server && npm run db:studio` bila perlu.
+
+### 10) Konvensi Commit & Dokumentasi
+- Kelompokkan edit per fitur. Di ringkasan commit, sebutkan cakupan (client/server), perubahan DB (jika ada), dan dampak WhatsApp (jika ada).
+- Update catatan/komentar singkat jika menambah event websocket atau mengubah pola respons API.
+
+### 11) Pedoman Eksekusi Perintah (Windows Git Bash)
+- Jalankan perintah dari root dengan `cd client` atau `cd server` sesuai konteks.
+- Gunakan flag non-interaktif jika diperlukan dalam skrip otomatis.
+
+### 12) Kapan Bertanya vs Menginferensi
+- Prefer cari informasi di kode (routes, services, config) terlebih dahulu.
+- Tanyakan hanya jika keputusan berisiko (mis. perubahan kontrak API besar, skema DB berdampak luas, atau modifikasi sesi WhatsApp).
+
+### 13) Format Respons Asisten
+- Ringkas, dapat dipindai. Gunakan bullet dan penekanan seperlunya.
+- Sertakan cuplikan kode hanya jika relevan dan singkat; patuhi struktur folder yang ada.

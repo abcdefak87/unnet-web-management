@@ -4,7 +4,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import Layout from '../../components/Layout'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import { api } from '../../lib/api'
-import { isTechnicianAdminBot, getAdminBotBadgeProps } from '../../lib/adminBotUtils'
 import { 
   Users, 
   Plus, 
@@ -161,8 +160,8 @@ export default function Technicians() {
       <Layout title="Kelola Teknisi">
         <div className="space-y-6">
           {/* Header with Tabs */}
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
+          <div className="card">
+            <div className="card-header">
               <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center">
                   <Users className="h-8 w-8 text-blue-600 mr-3" />
@@ -172,7 +171,7 @@ export default function Technicians() {
                   {activeTab === 'technicians' && user?.role !== 'user' && (
                     <button
                       onClick={() => router.push('/technicians/create')}
-                      className="btn btn-primary flex items-center space-x-2"
+                      className="btn-primary flex items-center space-x-2"
                     >
                       <Plus className="h-4 w-4" />
                       <span>Tambah Teknisi</span>
@@ -379,14 +378,14 @@ export default function Technicians() {
             </div>
           ) : (
             /* Registrations List */
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
+            <div className="card overflow-hidden">
+              <div className="card-header">
                 <h3 className="text-lg font-medium text-gray-900">Registrasi Teknisi Pending</h3>
                 <p className="text-sm text-gray-500 mt-1">Kelola persetujuan registrasi teknisi dari Telegram bot</p>
               </div>
               
               {isLoadingRegistrations ? (
-                <div className="p-6">
+                <div className="card-body">
                   <div className="animate-pulse space-y-4">
                     {Array.from({ length: 3 }).map((_, index) => (
                       <div key={index} className="border rounded-lg p-4">
@@ -402,7 +401,7 @@ export default function Technicians() {
                   </div>
                 </div>
               ) : !Array.isArray(registrations) || registrations.length === 0 ? (
-                <div className="p-6 text-center">
+                <div className="card-body text-center">
                   <UserCheck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Tidak ada registrasi pending</h3>
                   <p className="text-gray-500">Semua registrasi teknisi sudah diproses</p>
@@ -410,7 +409,7 @@ export default function Technicians() {
               ) : (
                 <div className="divide-y divide-gray-200">
                   {Array.isArray(registrations) && registrations.map((registration) => (
-                    <div key={registration.id} className="p-6">
+                    <div key={registration.id} className="card-body">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">

@@ -1,66 +1,81 @@
-# 📁 Scripts Directory
+# 🛠️ Scripts & Automation
 
-This directory contains all utility scripts, batch files, and development documentation for the ISP Management System.
+Folder ini berisi script dan file otomatisasi untuk sistem manajemen ISP.
 
-## 📁 Available Scripts
+## 📁 **Struktur Folder**
 
-### Development Scripts
-
-#### `dev.bat`
-**Purpose:** Start both frontend and backend servers for development
-```batch
-scripts\dev.bat
+```
+scripts/
+├── 📁 batch/                    # Script batch untuk Windows
+│   ├── start-all-production.bat # Start semua service production
+│   ├── start-whatsapp.bat       # Start WhatsApp bot
+│   ├── stop-all.bat             # Stop semua service
+│   └── whatsapp-bot-integrated.js # WhatsApp bot script
+├── whatsapp-status.json         # Status WhatsApp bot
+└── README.md                    # File ini
 ```
 
-#### `test-local.bat`
-**Purpose:** Test local environment setup and dependencies
-```batch
-scripts\test-local.bat
-```
+## 🚀 **Script Batch (Windows)**
 
-#### `start-dev.bat`
-**Purpose:** Alternative development server starter with browser auto-open
-```batch
-scripts\start-dev.bat
-```
+### **start-all-production.bat**
+Menjalankan semua service dalam mode production:
+- Server Express (port 3001)
+- Client Next.js (port 3000)
+- WhatsApp Bot
 
-### Setup Scripts
+### **start-whatsapp.bat**
+Menjalankan hanya WhatsApp bot dengan konfigurasi khusus.
 
-#### `run-fresh-setup.bat`
-**Purpose:** Fresh installation and setup of the entire project
-```batch
-scripts\run-fresh-setup.bat
-```
+### **stop-all.bat**
+Menghentikan semua service yang sedang berjalan.
 
-## 📚 Documentation
+## 📊 **WhatsApp Status**
 
-- **LOCAL_DEV_GUIDE.md** - Complete local development workflow guide
-- **DEVELOPMENT_STATUS.md** - Current development environment status
+File `whatsapp-status.json` berisi informasi status koneksi WhatsApp bot:
+- Status koneksi
+- Informasi user
+- Uptime
+- Command count
 
-## 🚀 Quick Start
+## 🔧 **Cara Penggunaan**
 
-### Development Setup:
+### **Development**
 ```bash
-# Install dependencies
-npm run install-all
+# Start semua service
+cd scripts/batch
+./start-all-production.bat
 
-# Setup database
-cd server
-npx prisma generate
-npx prisma db push
-cd ..
+# Start hanya WhatsApp bot
+./start-whatsapp.bat
 
-# Start development
-npm run dev
+# Stop semua service
+./stop-all.bat
 ```
 
-## 📝 Default Credentials
-- Username: `superadmin`
-- Password: `super123`
+### **Production**
+```bash
+# Gunakan script production
+cd scripts/batch
+./start-all-production.bat
+```
 
-**Important:** Change password after first login!
+## 📝 **Troubleshooting**
 
-## 🔗 Local Access
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:3001`
-- API Health: `http://localhost:3001/api/health`
+### **Port Already in Use**
+- Pastikan tidak ada service lain yang menggunakan port 3000/3001
+- Gunakan `stop-all.bat` untuk menghentikan service yang berjalan
+
+### **WhatsApp Bot Issues**
+- Periksa file `whatsapp-status.json` untuk status koneksi
+- Pastikan session WhatsApp masih valid
+- Restart bot jika diperlukan
+
+## 🔒 **Security Notes**
+
+- File session WhatsApp (`auth_info_baileys/`) tidak disertakan dalam repository
+- File status WhatsApp berisi informasi sensitif, jangan commit ke repository
+- Gunakan environment variables untuk konfigurasi sensitif
+
+---
+
+*Untuk dokumentasi lengkap, lihat folder [../docs/](../docs/)*

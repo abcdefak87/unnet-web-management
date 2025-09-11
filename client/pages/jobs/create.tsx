@@ -4,13 +4,15 @@ import { useForm } from 'react-hook-form'
 import { useAuth } from '../../contexts/AuthContext'
 import Layout from '../../components/Layout'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import Breadcrumb from '../../components/Breadcrumb'
 import QuickAddCustomerModal from '../../components/QuickAddCustomerModal'
 import { api } from '../../lib/api'
 import { Upload, MapPin, User, Phone, FileText, Camera, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface JobForm {
-  type: 'INSTALLATION' | 'REPAIR'
+  type: 'INSTALLATION' | 'REPAIR' | 'PSB' | 'GANGGUAN'
+  category: 'PSB' | 'GANGGUAN'
   customerId: string
   problemType?: string
   description?: string
@@ -26,6 +28,9 @@ export default function CreateJob() {
   const [isLoading, setIsLoading] = useState(false)
   const [loadingCustomers, setLoadingCustomers] = useState(true)
   const [showQuickAddModal, setShowQuickAddModal] = useState(false)
+  
+  // Get type from URL query
+  const { type: urlType } = router.query
 
   const {
     register,
@@ -39,6 +44,14 @@ export default function CreateJob() {
   const selectedCustomer = customers.find(c => c.id.toString() === selectedCustomerId)
 
   const jobType = watch('type')
+  const jobCategory = watch('category')
+
+  // Auto-update type based on category
+  useEffect(() => {
+    if (jobCategory) {
+      setValue('type', jobCategory)
+    }
+  }, [jobCategory, setValue])
 
   useEffect(() => {
     fetchCustomers()
@@ -48,7 +61,16 @@ export default function CreateJob() {
       .toISOString()
       .slice(0, 16)
     setValue('scheduledDate', localDateTime)
-  }, [])
+    
+    // Set type and category from URL
+    if (urlType === 'psb') {
+      setValue('type', 'PSB')
+      setValue('category', 'PSB')
+    } else if (urlType === 'gangguan') {
+      setValue('type', 'GANGGUAN')
+      setValue('category', 'GANGGUAN')
+    }
+  }, [setValue, urlType])
 
   const fetchCustomers = async () => {
     try {
@@ -74,6 +96,27 @@ export default function CreateJob() {
   const onSubmit = async (data: JobForm) => {
     setIsLoading(true)
     try {
+      // Validate required fields
+      if (!data.customerId) {
+        toast.error('Pelanggan harus dipilih')
+        return
+      }
+      
+      if (!data.category) {
+        toast.error('Kategori tiket harus dipilih')
+        return
+      }
+      
+      if (data.category === 'GANGGUAN' && !data.problemType) {
+        toast.error('Jenis gangguan harus dipilih')
+        return
+      }
+      
+      if (data.category === 'PSB' && !data.scheduledDate) {
+        toast.error('Tanggal jadwal harus diisi')
+        return
+      }
+      
       console.log('=== FRONTEND DEBUG ===');
       console.log('Form data before FormData creation:', data);
       
@@ -81,13 +124,25 @@ export default function CreateJob() {
       
       // Add basic job data
       formData.append('type', data.type)
+      formData.append('category', data.category)
       formData.append('customerId', data.customerId)
+      
       // Get address from selected customer
       const customer = customers.find(c => c.id.toString() === data.customerId)
       const customerAddress = customer?.address || ''
+      
+      if (!customerAddress) {
+        toast.error('Alamat pelanggan tidak ditemukan. Silakan periksa data pelanggan.')
+        return
+      }
+      
       formData.append('address', customerAddress)
-      if (data.type === 'REPAIR') {
+      
+      if (data.category === 'GANGGUAN') {
         formData.append('problemType', data.problemType || '')
+      }
+      if (data.category === 'PSB' && data.description) {
+        formData.append('description', data.description)
       }
       formData.append('scheduledDate', data.scheduledDate)
       
@@ -96,8 +151,8 @@ export default function CreateJob() {
         console.log(key, value);
       });
 
-      // Add photos for installation jobs
-      if (data.type === 'INSTALLATION') {
+      // Add photos for PSB jobs
+      if (data.category === 'PSB') {
         if (data.housePhoto?.[0]) {
           formData.append('housePhoto', data.housePhoto[0])
         }
@@ -109,10 +164,11 @@ export default function CreateJob() {
       // Remove Content-Type header to let browser set it automatically with boundary
       const response = await api.post('/jobs', formData)
 
-      toast.success('Job berhasil dibuat!')
+      toast.success('Tiket berhasil dibuat!')
       router.push('/jobs')
     } catch (error: any) {
-      const message = error.response?.data?.error || 'Gagal membuat job'
+      console.error('Create job error:', error)
+      const message = error.response?.data?.error || 'Gagal membuat tiket'
       toast.error(message)
     } finally {
       setIsLoading(false)
@@ -123,28 +179,44 @@ export default function CreateJob() {
     <ProtectedRoute>
       <Layout title="Buat Job Baru">
         <div className="max-w-4xl mx-auto">
+          {/* Breadcrumb */}
+          <Breadcrumb 
+            items={[
+              { name: 'Pekerjaan', href: '/jobs' },
+              { name: 'Buat Tiket Baru', current: true }
+            ]} 
+          />
           <div className="card p-6">
             <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">Buat Job Baru</h1>
-              <p className="text-gray-600">Buat job pemasangan atau perbaikan baru</p>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {urlType === 'psb' ? 'Buat Tiket PSB' : urlType === 'gangguan' ? 'Buat Tiket Gangguan' : 'Buat Tiket Baru'}
+              </h1>
+              <p className="text-gray-600">
+                {urlType === 'psb' ? 'Buat tiket pemasangan WiFi baru' : 
+                 urlType === 'gangguan' ? 'Buat tiket laporan gangguan WiFi' : 
+                 'Buat tiket PSB atau gangguan WiFi baru'}
+              </p>
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {/* Job Type */}
               <div>
-                <label className="form-label">Tipe Job *</label>
+                <label className="form-label">Kategori Tiket *</label>
                 <select
-                  {...register('type', { required: 'Tipe job wajib dipilih' })}
+                  {...register('category', { required: 'Kategori tiket wajib dipilih' })}
                   className="form-input"
                 >
-                  <option value="">Pilih tipe job</option>
-                  <option value="INSTALLATION">Pemasangan</option>
-                  <option value="REPAIR">Perbaikan</option>
+                  <option value="">Pilih kategori tiket</option>
+                  <option value="PSB">Tiket PSB (Pasang WiFi)</option>
+                  <option value="GANGGUAN">Tiket Gangguan</option>
                 </select>
-                {errors.type && (
-                  <p className="form-error">{errors.type.message}</p>
+                {errors.category && (
+                  <p className="form-error">{errors.category.message}</p>
                 )}
               </div>
+
+              {/* Job Type - Auto-set based on category */}
+              <input type="hidden" {...register('type')} />
 
               {/* Customer */}
               <div>
@@ -200,27 +272,45 @@ export default function CreateJob() {
                 </div>
               )}
 
-              {/* Problem Type for REPAIR only */}
-              {jobType === 'REPAIR' && (
+              {/* Problem Type for GANGGUAN only */}
+              {jobCategory === 'GANGGUAN' && (
                 <div>
-                  <label className="form-label">Jenis Masalah *</label>
+                  <label className="form-label">Jenis Gangguan *</label>
                   <div className="relative">
                     <FileText className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                     <select
-                      {...register('problemType', { required: 'Jenis masalah wajib dipilih' })}
+                      {...register('problemType', { required: 'Jenis gangguan wajib dipilih' })}
                       className="form-input pl-10"
                     >
-                      <option value="">Pilih jenis masalah</option>
+                      <option value="">Pilih jenis gangguan</option>
                       <option value="modem_rusak">Modem Rusak</option>
                       <option value="kabel_putus">Kabel Putus</option>
                       <option value="redaman_tinggi">Redaman Tinggi</option>
                       <option value="ganti_modem_cas">Ganti Modem/CAS Rusak</option>
-                      <option value="Masalah Settingan">Masalah Settingan</option>
+                      <option value="masalah_settingan">Masalah Settingan</option>
+                      <option value="tidak_ada_sinyal">Tidak Ada Sinyal</option>
+                      <option value="internet_lambat">Internet Lambat</option>
                     </select>
                   </div>
                   {errors.problemType && (
                     <p className="form-error">{errors.problemType.message}</p>
                   )}
+                </div>
+              )}
+
+              {/* Description for PSB only */}
+              {jobCategory === 'PSB' && (
+                <div>
+                  <label className="form-label">Deskripsi Pemasangan</label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                    <textarea
+                      {...register('description')}
+                      className="form-input pl-10"
+                      rows={3}
+                      placeholder="Deskripsikan kebutuhan pemasangan WiFi..."
+                    />
+                  </div>
                 </div>
               )}
 
@@ -243,12 +333,12 @@ export default function CreateJob() {
               </div>
 
 
-              {/* Photos for Installation */}
-              {jobType === 'INSTALLATION' && (
+              {/* Photos for PSB */}
+              {jobCategory === 'PSB' && (
                 <div className="space-y-4">
                   <div className="border-t pt-6">
                     <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      Foto Wajib untuk Pemasangan
+                      Foto Wajib untuk Pemasangan WiFi
                     </h3>
                   </div>
 
@@ -261,7 +351,7 @@ export default function CreateJob() {
                         type="file"
                         accept="image/*"
                         {...register('housePhoto', {
-                          required: jobType === 'INSTALLATION' ? 'Foto rumah wajib untuk pemasangan' : false
+                          required: jobCategory === 'PSB' ? 'Foto rumah wajib untuk pemasangan' : false
                         })}
                         className="form-input pl-10"
                       />
@@ -280,7 +370,7 @@ export default function CreateJob() {
                         type="file"
                         accept="image/*"
                         {...register('customerIdPhoto', {
-                          required: jobType === 'INSTALLATION' ? 'Foto KTP wajib untuk pemasangan' : false
+                          required: jobCategory === 'PSB' ? 'Foto KTP wajib untuk pemasangan' : false
                         })}
                         className="form-input pl-10"
                       />

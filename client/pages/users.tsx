@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext'
 import Layout from '../components/Layout'
 import ProtectedRoute from '../components/ProtectedRoute'
 import { api } from '../lib/api'
-import { isSystemUserAdminBot, getAdminBotBadgeProps } from '../lib/adminBotUtils'
 import { 
   Users, 
   Plus, 
@@ -22,11 +21,13 @@ import toast from 'react-hot-toast'
 
 interface User {
   id: string
-  email: string
+  email?: string
+  username: string
   name: string
   role: string
   isActive: boolean
   lastLogin?: string
+  whatsappNumber?: string
   telegramChatId?: string
 }
 
@@ -38,12 +39,17 @@ export default function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [userForm, setUserForm] = useState({
-    email: '',
     name: '',
+    whatsappNumber: '',
+    username: '',
     password: '',
     role: 'user',
     isActive: true
   })
+  const [showOtpModal, setShowOtpModal] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
+  const [tempUserData, setTempUserData] = useState<any>(null)
+  const [isVerifying, setIsVerifying] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -65,13 +71,49 @@ export default function UsersPage() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await api.post('/users', userForm)
+      const response = await api.post('/users', userForm)
+      if (response.data.tempData) {
+        // OTP sent, show verification modal
+        setTempUserData(response.data.tempData)
+        setShowOtpModal(true)
+        setShowCreateModal(false)
+        toast.success('OTP telah dikirim ke WhatsApp')
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Gagal membuat user')
+    }
+  }
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsVerifying(true)
+    try {
+      await api.post('/users/verify-otp', {
+        otp: otpCode,
+        ...tempUserData
+      })
       toast.success('User berhasil dibuat')
-      setShowCreateModal(false)
-      setUserForm({ email: '', name: '', password: '', role: 'user', isActive: true })
+      setShowOtpModal(false)
+      setOtpCode('')
+      setTempUserData(null)
+      setUserForm({ name: '', whatsappNumber: '', username: '', password: '', role: 'user', isActive: true })
       fetchUsers()
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'OTP tidak valid')
+    } finally {
+      setIsVerifying(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    try {
+      await api.post('/users/resend-otp', {
+        whatsappNumber: tempUserData.whatsappNumber,
+        type: 'REGISTRATION'
+      })
+      toast.success('OTP telah dikirim ulang')
     } catch (error) {
-      toast.error('Gagal membuat user')
+      toast.error('Gagal mengirim ulang OTP')
     }
   }
 
@@ -81,7 +123,7 @@ export default function UsersPage() {
       await api.put(`/users/${editingUser?.id}`, userForm)
       toast.success('User berhasil diupdate')
       setEditingUser(null)
-      setUserForm({ email: '', name: '', password: '', role: 'user', isActive: true })
+      setUserForm({ name: '', whatsappNumber: '', username: '', password: '', role: 'user', isActive: true })
       fetchUsers()
     } catch (error) {
       toast.error('Gagal mengupdate user')
@@ -166,90 +208,88 @@ export default function UsersPage() {
       <Layout>
         <div className="space-y-6">
           {/* Header */}
-          <div className="bg-white shadow rounded-lg p-6">
+          <div className="card">
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center">
                   <Users className="h-8 w-8 text-blue-600 mr-3" />
-                  User Management
+                  Manajemen User
                 </h1>
                 <p className="text-gray-600 mt-1">
-                  Manage system users and their permissions
+                  Kelola user sistem dan perizinan mereka
                 </p>
               </div>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
+                className="btn-primary flex items-center"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add User
+                Tambah User
               </button>
             </div>
           </div>
 
           {/* Users Table */}
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="table-container">
+            <div className="table-wrapper">
+              <table className="table">
+                <thead>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="table-cell-nowrap">
                     User
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="table-cell-nowrap">
                     Role
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="table-cell-nowrap">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last Login
+                  <th className="table-cell-nowrap">
+                    Login Terakhir
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
+                  <th className="table-cell-right table-cell-nowrap">
+                    Aksi
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {users.map((userData) => (
                   <tr key={userData.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="table-cell-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">{userData.name}</div>
-                        <div className="text-sm text-gray-500">{userData.email}</div>
+                        <div className="text-sm text-gray-500">@{userData.username}</div>
+                        {userData.whatsappNumber && (
+                          <div className="text-xs text-gray-400">WA: {userData.whatsappNumber}</div>
+                        )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="table-cell-nowrap">
                       <div className="flex items-center space-x-2">
                         <div className="flex items-center">
                           {getRoleIcon(userData.role)}
                           <span className="ml-2 text-sm text-gray-900">{getRoleName(userData.role)}</span>
                         </div>
-                        {isSystemUserAdminBot(userData) && (
-                          <span className={getAdminBotBadgeProps().className}>
-                            <Bot className="h-3 w-3 mr-1" />
-                            {getAdminBotBadgeProps().text}
-                          </span>
-                        )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    <td className="table-cell-nowrap">
+                      <span className={`badge ${
                         userData.isActive 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
+                          ? 'badge-success' 
+                          : 'badge-danger'
                       }`}>
-                        {userData.isActive ? 'Active' : 'Inactive'}
+                        {userData.isActive ? 'Aktif' : 'Tidak Aktif'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {userData.lastLogin ? new Date(userData.lastLogin).toLocaleDateString() : 'Never'}
+                    <td className="table-cell-nowrap text-sm text-gray-500">
+                      {userData.lastLogin ? new Date(userData.lastLogin).toLocaleDateString() : 'Belum Pernah'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end space-x-2">
+                    <td className="table-cell-right">
+                      <div className="table-actions">
                         <button
                           onClick={() => toggleUserStatus(userData.id, userData.isActive)}
-                          className="text-gray-600 hover:text-gray-900"
-                          title={userData.isActive ? 'Deactivate' : 'Activate'}
+                          className="table-action-btn-view"
+                          title={userData.isActive ? 'Nonaktifkan' : 'Aktifkan'}
                         >
                           {userData.isActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
@@ -257,14 +297,15 @@ export default function UsersPage() {
                           onClick={() => {
                             setEditingUser(userData)
                             setUserForm({
-                              email: userData.email,
                               name: userData.name,
+                              whatsappNumber: userData.whatsappNumber || '',
+                              username: userData.username,
                               password: '',
                               role: userData.role,
                               isActive: userData.isActive
                             })
                           }}
-                          className="text-blue-600 hover:text-blue-900"
+                          className="table-action-btn-edit"
                           title="Edit"
                         >
                           <Edit className="h-4 w-4" />
@@ -272,8 +313,8 @@ export default function UsersPage() {
                         {userData.id !== user?.id && (
                           <button
                             onClick={() => handleDeleteUser(userData.id)}
-                            className="text-red-600 hover:text-red-900"
-                            title="Delete"
+                            className="table-action-btn-delete"
+                            title="Hapus"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -284,96 +325,183 @@ export default function UsersPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Create/Edit Modal */}
           {(showCreateModal || editingUser) && (
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-              <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  {editingUser ? 'Edit User' : 'Create New User'}
-                </h3>
-                <form onSubmit={editingUser ? handleUpdateUser : handleCreateUser}>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Email</label>
-                      <input
-                        type="email"
-                        value={userForm.email}
-                        onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                        required
-                      />
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h3 className="modal-title">
+                    {editingUser ? 'Edit User' : 'Buat User Baru'}
+                  </h3>
+                </div>
+                <div className="modal-body">
+                  <form id="user-form" onSubmit={editingUser ? handleUpdateUser : handleCreateUser}>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="form-label">Nama</label>
+                        <input
+                          type="text"
+                          value={userForm.name}
+                          onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                          className="form-input"
+                          placeholder="Nama lengkap"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">Nomor WhatsApp</label>
+                        <input
+                          type="text"
+                          value={userForm.whatsappNumber}
+                          onChange={(e) => setUserForm({ ...userForm, whatsappNumber: e.target.value })}
+                          className="form-input"
+                          placeholder="628xxx atau 08xxx"
+                          required={!editingUser}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">Username</label>
+                        <input
+                          type="text"
+                          value={userForm.username}
+                          onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                          className="form-input"
+                          placeholder="Username untuk login"
+                          required={!editingUser}
+                          disabled={editingUser ? true : false}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">
+                          Password {editingUser && '(kosongkan untuk tetap menggunakan yang lama)'}
+                        </label>
+                        <input
+                          type="password"
+                          value={userForm.password}
+                          onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                          className="form-input"
+                          autoComplete="current-password"
+                          required={!editingUser}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">Role</label>
+                        <select
+                          value={userForm.role}
+                          onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                          className="form-input"
+                        >
+                          <option value="superadmin">Super Admin</option>
+                          <option value="admin">Admin</option>
+                          <option value="gudang">Gudang Admin</option>
+                          <option value="user">User</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id="isActive"
+                          checked={userForm.isActive}
+                          onChange={(e) => setUserForm({ ...userForm, isActive: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">
+                          Aktif
+                        </label>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Name</label>
-                      <input
-                        type="text"
-                        value={userForm.name}
-                        onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                        required
-                      />
+                  </form>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateModal(false)
+                      setEditingUser(null)
+                      setUserForm({ name: '', whatsappNumber: '', username: '', password: '', role: 'user', isActive: true })
+                    }}
+                    className="btn-outline"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    form="user-form"
+                    className="btn-primary"
+                  >
+                    {editingUser ? 'Update' : 'Buat'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* OTP Verification Modal */}
+          {showOtpModal && (
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h3 className="modal-title">
+                    Verifikasi OTP
+                  </h3>
+                  <p className="modal-subtitle">
+                    Masukkan kode OTP yang telah dikirim ke WhatsApp {tempUserData?.whatsappNumber}
+                  </p>
+                </div>
+                <div className="modal-body">
+                  <form id="otp-form" onSubmit={handleVerifyOtp}>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="form-label">Kode OTP</label>
+                        <input
+                          type="text"
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          className="form-input text-center text-lg font-mono"
+                          placeholder="000000"
+                          maxLength={6}
+                          required
+                          autoFocus
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Password {editingUser && '(leave blank to keep current)'}
-                      </label>
-                      <input
-                        type="password"
-                        value={userForm.password}
-                        onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                        autoComplete="current-password"
-                        required={!editingUser}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Role</label>
-                      <select
-                        value={userForm.role}
-                        onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                      >
-                        <option value="superadmin">Super Admin</option>
-                        <option value="admin">Admin</option>
-                        <option value="gudang">Gudang Admin</option>
-                        <option value="user">User</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="isActive"
-                        checked={userForm.isActive}
-                        onChange={(e) => setUserForm({ ...userForm, isActive: e.target.checked })}
-                        className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                      />
-                      <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">
-                        Active
-                      </label>
-                    </div>
-                  </div>
-                  <div className="flex justify-end space-x-3 mt-6">
+                  </form>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                    disabled={isVerifying}
+                  >
+                    Kirim ulang OTP
+                  </button>
+                  <div className="flex space-x-3">
                     <button
                       type="button"
                       onClick={() => {
-                        setShowCreateModal(false)
-                        setEditingUser(null)
-                        setUserForm({ email: '', name: '', password: '', role: 'user', isActive: true })
+                        setShowOtpModal(false)
+                        setOtpCode('')
+                        setTempUserData(null)
                       }}
-                      className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                      className="btn-outline"
+                      disabled={isVerifying}
                     >
-                      Cancel
+                      Batal
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      form="otp-form"
+                      className="btn-primary disabled:opacity-50"
+                      disabled={isVerifying || otpCode.length !== 6}
                     >
-                      {editingUser ? 'Update' : 'Create'}
+                      {isVerifying ? 'Memverifikasi...' : 'Verifikasi'}
                     </button>
                   </div>
-                </form>
+                </div>
               </div>
             </div>
           )}

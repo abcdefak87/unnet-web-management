@@ -1,10 +1,10 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { PrismaClient } = require('@prisma/client');
+// PrismaClient imported from utils/database
 const { authenticateToken, requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
 // Get all technicians
 router.get('/', authenticateToken, requirePermission('technicians:view'), async (req, res) => {
@@ -87,7 +87,7 @@ router.get('/:id', authenticateToken, requirePermission('technicians:view'), asy
 router.post('/', authenticateToken, requirePermission('technicians:create'), [
   body('name').isLength({ min: 2 }).trim(),
   body('phone').isMobilePhone('id-ID').trim(),
-  body('telegramChatId').optional().trim(),
+  body('whatsappJid').optional().trim(),
   body('isActive').optional().isBoolean(),
   body('isAvailable').optional().isBoolean(),
   body('isAdmin').optional().isBoolean()
@@ -98,13 +98,13 @@ router.post('/', authenticateToken, requirePermission('technicians:create'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, phone, telegramChatId, isActive = true, isAvailable = true, isAdmin = false } = req.body;
+    const { name, phone, whatsappJid, isActive = true, isAvailable = true, isAdmin = false } = req.body;
 
     const technician = await prisma.technician.create({
       data: {
         name,
         phone,
-        telegramChatId,
+        whatsappJid,
         isActive,
         isAvailable,
         isAdmin
@@ -147,7 +147,7 @@ router.patch('/:id/admin-role', authenticateToken, requirePermission('technician
 router.put('/:id', authenticateToken, requirePermission('technicians:edit'), [
   body('name').isLength({ min: 2 }).trim().optional(),
   body('phone').isMobilePhone('id-ID').optional(),
-  body('telegramChatId').optional().trim(),
+  body('whatsappJid').optional().trim(),
   body('isActive').isBoolean().optional(),
   body('isAvailable').isBoolean().optional(),
   body('isAdmin').isBoolean().optional()
@@ -158,12 +158,12 @@ router.put('/:id', authenticateToken, requirePermission('technicians:edit'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, phone, telegramChatId, isActive, isAvailable, isAdmin } = req.body;
+    const { name, phone, whatsappJid, isActive, isAvailable, isAdmin } = req.body;
     const updateData = {};
 
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
-    if (telegramChatId !== undefined) updateData.telegramChatId = telegramChatId;
+    if (whatsappJid !== undefined) updateData.whatsappJid = whatsappJid;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
     if (isAdmin !== undefined) updateData.isAdmin = isAdmin;

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import Cookies from 'js-cookie'
 import toast from 'react-hot-toast'
+import { attachDebugInterceptors, errorHandlers, detectNetworkIssue, formatAxiosError } from './axios-debug'
 
 const getApiBaseUrl = () => {
   // First check for environment variable
@@ -14,7 +15,7 @@ const getApiBaseUrl = () => {
     return '/api';
   }
   
-  // In development, use localhost
+  // In development, always use direct localhost URL to avoid rewrite issues
   return 'http://localhost:3001/api';
 };
 
@@ -25,6 +26,11 @@ export const api = axios.create({
   timeout: 10000,
 })
 
+// Attach debugging interceptors in development
+if (process.env.NODE_ENV === 'development') {
+  attachDebugInterceptors(api);
+}
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
@@ -32,6 +38,17 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    
+    // Debug logging for CSRF token requests
+    if (config.url?.includes('csrf-token')) {
+      console.log('CSRF token request:', {
+        url: config.url,
+        baseURL: config.baseURL,
+        fullURL: `${config.baseURL}${config.url}`,
+        method: config.method
+      });
+    }
+    
     return config
   },
   (error) => {
@@ -41,9 +58,29 @@ api.interceptors.request.use(
 
 // Response interceptor to handle errors and token refresh
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Debug logging for CSRF token responses
+    if (response.config.url?.includes('csrf-token')) {
+      console.log('CSRF token response:', {
+        status: response.status,
+        data: response.data,
+        headers: response.headers
+      });
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+
+    // Debug logging for CSRF token errors
+    if (originalRequest?.url?.includes('csrf-token')) {
+      console.error('CSRF token error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+        config: originalRequest
+      });
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -55,8 +92,11 @@ api.interceptors.response.use(
             refreshToken
           });
 
-          const { token } = response.data;
+          const { token, refreshToken: rotated } = response.data;
           Cookies.set('token', token);
+          if (rotated) {
+            Cookies.set('refreshToken', rotated);
+          }
           
           // Retry the original request with new token
           originalRequest.headers.Authorization = `Bearer ${token}`;
@@ -79,6 +119,39 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 )
+
+// Retry logic with exponential backoff for rate limiting
+const retryRequest = async (config: any, retryCount = 0): Promise<any> => {
+  const maxRetries = 3
+  const baseDelay = 1000 // 1 second
+  
+  try {
+    return await api(config)
+  } catch (error: any) {
+    // Only retry on 429 (Too Many Requests) or network errors
+    if (retryCount < maxRetries && (
+      error.response?.status === 429 || 
+      !error.response || 
+      error.code === 'NETWORK_ERROR'
+    )) {
+      const delay = baseDelay * Math.pow(2, retryCount) + Math.random() * 1000
+      console.log(`Retrying request (attempt ${retryCount + 1}/${maxRetries}) after ${delay}ms`)
+      
+      await new Promise(resolve => setTimeout(resolve, delay))
+      return retryRequest(config, retryCount + 1)
+    }
+    throw error
+  }
+}
+
+// Enhanced API wrapper with retry logic
+export const apiWithRetry = {
+  get: (url: string, config?: any) => retryRequest({ ...config, method: 'get', url }),
+  post: (url: string, data?: any, config?: any) => retryRequest({ ...config, method: 'post', url, data }),
+  put: (url: string, data?: any, config?: any) => retryRequest({ ...config, method: 'put', url, data }),
+  delete: (url: string, config?: any) => retryRequest({ ...config, method: 'delete', url }),
+  patch: (url: string, data?: any, config?: any) => retryRequest({ ...config, method: 'patch', url, data })
+}
 
 // API endpoints
 export const authAPI = {
@@ -114,6 +187,8 @@ export const jobsAPI = {
   }),
   updateStatus: (id: string, data: any) => api.put(`/jobs/${id}/status`, data),
   assign: (id: string, data: any) => api.post(`/jobs/${id}/assign`, data),
+  selfAssign: (id: string) => api.post(`/jobs/${id}/self-assign`, {}),
+  confirm: (id: string, data: { action: 'ACCEPT' | 'DECLINE' }) => api.post(`/jobs/${id}/confirm`, data),
   complete: (id: string, data: FormData) => api.put(`/jobs/${id}/complete`, data, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
@@ -143,22 +218,85 @@ export const inventoryAPI = {
 }
 
 export const customersAPI = {
-  getAll: (params?: any) => api.get('/customers', { params }),
-  getById: (id: string) => api.get(`/customers/${id}`),
-  create: (data: any) => api.post('/customers', data),
-  update: (id: string, data: any) => api.put(`/customers/${id}`, data),
+  getAll: (params?: any) => apiWithRetry.get('/customers', { params }),
+  getById: (id: string) => apiWithRetry.get(`/customers/${id}`),
+  create: (data: any) => apiWithRetry.post('/customers', data),
+  update: (id: string, data: any) => apiWithRetry.put(`/customers/${id}`, data),
+  registerPublic: (data: FormData) => apiWithRetry.post('/customers/register', data, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  // Email verification endpoints removed - no longer required
+  getCSRFToken: () => {
+    console.log('Fetching CSRF token from:', `${API_BASE_URL}/customers/register/csrf-token`);
+    return apiWithRetry.get('/customers/register/csrf-token');
+  },
 }
 
 export const reportsAPI = {
-  getDashboard: () => api.get('/reports/dashboard'),
-  getJobs: (params?: any) => api.get('/reports/jobs', { params }),
-  getInventory: (params?: any) => api.get('/reports/inventory', { params }),
-  getTechnicians: (params?: any) => api.get('/reports/technicians', { params }),
+  getDashboard: () => apiWithRetry.get('/reports/dashboard'),
+  getJobs: (params?: any) => apiWithRetry.get('/reports/jobs', { params }),
+  getInventory: (params?: any) => apiWithRetry.get('/reports/inventory', { params }),
+  getTechnicians: (params?: any) => apiWithRetry.get('/reports/technicians', { params }),
 }
 
-export const telegramAPI = {
-  sendMessage: (data: any) => api.post('/telegram/send-message', data),
-  broadcastJob: (jobId: string) => api.post(`/telegram/broadcast-job/${jobId}`),
-  sendReminders: () => api.post('/telegram/send-reminders'),
-  getBotInfo: () => api.get('/telegram/bot-info'),
+// WhatsApp API endpoints
+export const whatsappAPI = {
+  getStatus: () => api.get('/whatsapp/status'),
+  getStats: () => api.get('/whatsapp/stats'),
+  sendTestMessage: (data: { phone: string; message?: string }) => api.post('/monitoring/whatsapp/test', data),
+  initialize: () => api.post('/whatsapp/initialize'),
+  sendMessage: (data: { to: string; message: string }) => api.post('/whatsapp/send', data),
 }
+
+// Monitoring API endpoints
+export const monitoringAPI = {
+  getSystemStats: () => api.get('/monitoring/stats'),
+  getWhatsAppStatus: () => api.get('/monitoring/whatsapp/status'),
+  testWhatsApp: (data: { phone: string; message?: string }) => api.post('/monitoring/whatsapp/test', data),
+}
+
+// Development API testing utilities (only available in development)
+export const devAPI = {
+  // Test all API endpoints
+  testAllEndpoints: async () => {
+    if (process.env.NODE_ENV !== 'development') {
+      console.warn('API testing only available in development mode');
+      return;
+    }
+
+    const { APITester } = await import('./axios-debug');
+    const tester = new APITester(API_BASE_URL);
+    
+    console.group('🧪 Testing All API Endpoints');
+    
+    // Test basic endpoints
+    await tester.testEndpoint('GET', '/health');
+    await tester.testEndpoint('GET', '/api/health');
+    
+    // Test WhatsApp endpoints
+    await tester.testEndpoint('GET', '/api/whatsapp/status');
+    await tester.testEndpoint('GET', '/api/whatsapp/stats');
+    
+    // Test monitoring endpoints
+    await tester.testEndpoint('GET', '/api/monitoring/stats');
+    await tester.testEndpoint('GET', '/api/monitoring/whatsapp/status');
+    
+    // Run full diagnostics
+    await tester.runDiagnostics();
+    
+    console.groupEnd();
+  },
+  
+  // Test specific endpoint
+  testEndpoint: async (method: string, path: string, data?: any) => {
+    if (process.env.NODE_ENV !== 'development') {
+      console.warn('API testing only available in development mode');
+      return;
+    }
+
+    const { APITester } = await import('./axios-debug');
+    const tester = new APITester(API_BASE_URL);
+    await tester.testEndpoint(method, path, data);
+  }
+}
+

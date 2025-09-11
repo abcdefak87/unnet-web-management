@@ -1,7 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
 // Middleware to authenticate JWT token
 const authenticateToken = (req, res, next) => {
@@ -31,7 +29,9 @@ const authenticateToken = (req, res, next) => {
           name: true,
           email: true,
           role: true,
-          isActive: true
+          isActive: true,
+          phone: true,
+          whatsappNumber: true
         }
       });
 
@@ -93,16 +93,16 @@ const requirePermission = (permission) => {
       }
     }
 
-    // Gudang has inventory-only access + reports
+    // Gudang has inventory-only access (reports excluded per policy)
     if (req.user.role === 'gudang') {
-      const gudangPermissions = ['inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete', 'inventory:transactions', 'reports:view'];
+      const gudangPermissions = ['inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete', 'inventory:transactions'];
       if (gudangPermissions.includes(permission)) {
         return next();
       }
     }
 
-    // User has view-only access
-    if (req.user.role === 'user') {
+    // User/Technician has view-only access
+    if (req.user.role === 'user' || req.user.role === 'technician') {
       const userPermissions = ['jobs:view', 'technicians:view', 'reports:view'];
       if (userPermissions.includes(permission)) {
         return next();
@@ -144,17 +144,17 @@ const requireAnyPermission = (permissions) => {
       }
     }
 
-    // Gudang has inventory-only access + reports
+    // Gudang has inventory-only access (reports excluded per policy)
     if (req.user.role === 'gudang') {
-      const gudangPermissions = ['inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete', 'inventory:transactions', 'reports:view'];
+      const gudangPermissions = ['inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete', 'inventory:transactions'];
       const hasAnyPermission = permissions.some(perm => gudangPermissions.includes(perm));
       if (hasAnyPermission) {
         return next();
       }
     }
 
-    // User has view-only access
-    if (req.user.role === 'user') {
+    // User/Technician has view-only access
+    if (req.user.role === 'user' || req.user.role === 'technician') {
       const userPermissions = ['jobs:view', 'technicians:view', 'reports:view'];
       const hasAnyPermission = permissions.some(perm => userPermissions.includes(perm));
       if (hasAnyPermission) {

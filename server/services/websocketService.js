@@ -1,8 +1,7 @@
 const { Server } = require('socket.io');
 const logger = require('../utils/logger');
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
+const jwt = require('jsonwebtoken');
 let io = null;
 
 // Connection tracking for rate limiting
@@ -27,6 +26,22 @@ const initializeWebSocket = (server) => {
   });
 
   io.on('connection', (socket) => {
+    // Authenticate connection via JWT from query or headers
+    try {
+      const token = socket.handshake.auth?.token || socket.handshake.query?.token || (socket.handshake.headers?.authorization?.split(' ')[1]);
+      if (!token) {
+        socket.emit('error', { message: 'Authentication required' });
+        return socket.disconnect(true);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.data.userId = decoded.userId;
+      socket.data.role = decoded.role;
+    } catch (authError) {
+      logger.warn('WebSocket auth failed', { error: authError.message, socketId: socket.id });
+      socket.emit('error', { message: 'Invalid or expired token' });
+      return socket.disconnect(true);
+    }
     // Rate limiting check
     const clientIP = socket.handshake.address;
     const now = Date.now();
@@ -61,11 +76,12 @@ const initializeWebSocket = (server) => {
       }
     }, 30000); // 30 seconds timeout
 
-    // Join user to their role-based room
-    socket.on('join-room', (data) => {
-      const { userId, role } = data;
-      socket.join(`user-${userId}`);
-      socket.join(`role-${role}`);
+    // Join user to their rooms based on verified identity
+    socket.on('join-room', () => {
+      const userId = socket.data.userId;
+      const role = socket.data.role;
+      if (userId) socket.join(`user-${userId}`);
+      if (role) socket.join(`role-${role}`);
       logger.info('User joined WebSocket rooms', { userId, role, socketId: socket.id });
     });
 
@@ -101,6 +117,10 @@ const initializeWebSocket = (server) => {
           connectionAttempts.delete(clientIP);
         }
       }
+      
+      // Clean up socket data to prevent memory leaks
+      delete socket.data.userId;
+      delete socket.data.role;
     });
 
     // Handle connection errors
@@ -250,6 +270,30 @@ const sendUserNotification = (userId, notification) => {
   logger.info('Sent user notification via WebSocket', { userId, title: notification.title });
 };
 
+// Broadcast WhatsApp status updates
+const broadcastWhatsAppStatusUpdate = (statusData) => {
+  if (!io) return;
+
+  const payload = {
+    type: 'WHATSAPP_STATUS_UPDATE',
+    status: statusData.status,
+    connected: statusData.connected,
+    user: statusData.user,
+    uptime: statusData.uptime,
+    lastUpdate: statusData.lastUpdate,
+    commandCount: statusData.commandCount,
+    timestamp: new Date().toISOString()
+  };
+
+  // Broadcast to all connected users
+  io.emit('whatsapp-status-update', payload);
+
+  logger.info('Broadcasted WhatsApp status update via WebSocket', { 
+    status: statusData.status, 
+    connected: statusData.connected 
+  });
+};
+
 // Get connected clients count
 const getConnectedClientsCount = () => {
   if (!io) return 0;
@@ -271,6 +315,7 @@ module.exports = {
   broadcastCustomerUpdate,
   broadcastSystemNotification,
   sendUserNotification,
+  broadcastWhatsAppStatusUpdate,
   getConnectedClientsCount,
   getClientsInRoom
 };

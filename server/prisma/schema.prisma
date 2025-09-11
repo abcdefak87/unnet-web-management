@@ -10,18 +10,20 @@ datasource db {
 model User {
   id               String    @id @default(cuid())
   name             String
-  email            String    @unique
+  username         String    @unique
+  email            String?   @unique
   password         String
   role             String    @default("user")
   permissions      String?
-  phone            String?
+  phone            String?   @unique
+  whatsappNumber   String?   @unique // WhatsApp number for OTP
   isActive         Boolean   @default(true)
+  isVerified       Boolean   @default(false) // Email/Phone verified
   lastLogin        DateTime?
-  telegramChatId   String?   @unique
+  whatsappJid      String?   @unique // WhatsApp JID
   refreshTokenHash String?   // For refresh token security
 
   // Relations
-  jobs                  Job[]
   notifications         Notification[]
   inventoryLogs         InventoryLog[]
   createdJobs           Job[]                    @relation("CreatedBy")
@@ -36,11 +38,115 @@ model User {
   @@map("users")
 }
 
+// WhatsApp Session Backup
+model WhatsAppSession {
+  id        String   @id @default(cuid())
+  fileName  String   @unique
+  content   Bytes
+  encrypted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("whatsapp_sessions")
+}
+
+// WhatsApp Metrics Storage
+model WhatsAppMetrics {
+  id             String   @id @default(cuid())
+  timestamp      DateTime @default(now())
+  messagesSent   Int      @default(0)
+  messagesFailed Int      @default(0)
+  messagesQueued Int      @default(0)
+  connections    Int      @default(0)
+  disconnects    Int      @default(0)
+  errors         Int      @default(0)
+  avgResponseTime Float?  // milliseconds
+  metadata       String?  // JSON data
+  
+  @@index([timestamp])
+  @@map("whatsapp_metrics")
+}
+
+// WhatsApp Message Log
+model WhatsAppMessage {
+  id          String   @id @default(cuid())
+  messageId   String?  @unique // WhatsApp message ID
+  from        String   // Sender JID
+  to          String   // Recipient JID
+  content     String?  // Message content (encrypted in production)
+  type        String   // text, image, document, etc.
+  status      String   // pending, sent, delivered, read, failed
+  retries     Int      @default(0)
+  error       String?  // Error message if failed
+  createdAt   DateTime @default(now())
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  
+  @@index([from, to])
+  @@index([status])
+  @@index([createdAt])
+  @@map("whatsapp_messages")
+}
+
+// WhatsApp Alerts
+model WhatsAppAlert {
+  id        String   @id @default(cuid())
+  level     String   // info, warning, error, critical
+  message   String
+  context   String?  // JSON additional context
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  
+  @@index([level, resolved])
+  @@index([createdAt])
+  @@map("whatsapp_alerts")
+}
+
+// OTP Model for verification codes
+model OTP {
+  id         String   @id @default(cuid())
+  identifier String   // phone number or email
+  code       String
+  type       String   // REGISTRATION, RESET_PASSWORD, LOGIN_VERIFICATION
+  attempts   Int      @default(0)
+  expiresAt  DateTime
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  
+  @@index([identifier, type])
+  @@map("otps")
+}
+
+// Email Verification Model removed - no longer required
+
+// Audit Log Model
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String   // CUSTOMER_REGISTRATION_ATTEMPT, etc.
+  entityType  String?  // customer, user, etc.
+  entityId    String?
+  ip          String?
+  userAgent   String?
+  success     Boolean
+  statusCode  Int?
+  error       String?
+  metadata    String?  // JSON additional data
+  createdAt   DateTime @default(now())
+  
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([ip])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
 model Technician {
   id                 String    @id @default(cuid())
   name               String
   phone              String    @unique
-  telegramChatId     String?   @unique
+  whatsappJid        String?   @unique  // WhatsApp JID untuk bot notifications
   isActive           Boolean   @default(true)
   isAvailable        Boolean   @default(true)
   isAdmin            Boolean   @default(false) // Admin role for job creation
@@ -63,13 +169,13 @@ model Technician {
 model Customer {
   id      String  @id @default(cuid())
   name    String
-  phone   String
+  phone   String  @unique
   address String
-  email   String?
+  email   String? @unique
 
   // KTP Information for new installations
   ktpName       String? // Nama lengkap sesuai KTP
-  ktpNumber     String? // Nomor KTP
+  ktpNumber     String? @unique // Nomor KTP
   ktpAddress    String? // Alamat lengkap sesuai KTP
   ktpPhotoUrl   String? // URL foto KTP
   housePhotoUrl String? // URL foto rumah
@@ -80,7 +186,7 @@ model Customer {
   longitude Float? // GPS Longitude
 
   // Installation status
-  isVerified       Boolean @default(false)
+  isVerified       Boolean   @default(true) // Auto-verified without email verification
   installationType String? // NEW_INSTALLATION, RELOCATION, UPGRADE
 
   // Registration workflow
@@ -93,19 +199,29 @@ model Customer {
   rejectedById       String?
   rejectionReason    String?
 
+  // Security fields
+  registrationIP     String? // Store IP for audit
+  userAgent          String? // Store user agent for audit
+
   // Relations
-  jobs Job[]
+  jobs                Job[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([phone])
+  @@index([email])
+  @@index([ktpNumber])
+  @@index([registrationStatus])
+  @@index([registeredAt])
   @@map("customers")
 }
 
 model Job {
   id             String    @id @default(cuid())
   jobNumber      String    @unique
-  type           String
+  type           String    // INSTALLATION, REPAIR, PSB, GANGGUAN
+  category       String    @default("PSB") // PSB, GANGGUAN
   status         String    @default("OPEN")
   title          String?
   description    String?
@@ -117,7 +233,7 @@ model Job {
   assignmentType String    @default("SINGLE") // SINGLE, PRIMARY_SECONDARY, TEAM
 
   // Job approval workflow
-  approvalStatus  String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvalStatus  String    @default("PENDING")
   approvedAt      DateTime?
   approvedById    String?
   approvedBy      User?     @relation("ApprovedBy", fields: [approvedById], references: [id])
@@ -155,8 +271,6 @@ model Job {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  User      User?    @relation(fields: [userId], references: [id])
-  userId    String?
 
   @@map("jobs")
 }

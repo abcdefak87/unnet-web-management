@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+// PrismaClient imported from utils/database
 const { authenticateToken } = require('../middleware/auth');
 
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
 // Get notification counts for sidebar badges
 router.get('/counts', authenticateToken, async (req, res) => {
@@ -64,7 +64,7 @@ router.get('/counts', authenticateToken, async (req, res) => {
     if (role === 'superadmin' || role === 'admin' || role === 'gudang') {
       const lowStockItems = await prisma.item.count({
         where: {
-          stock: {
+          currentStock: {
             lte: 10 // Consider items with 10 or less as low stock
           }
         }
@@ -74,7 +74,7 @@ router.get('/counts', authenticateToken, async (req, res) => {
     }
 
     // For regular users, only show active jobs they can see
-    if (role === 'user') {
+    if (role === 'user' || role === 'technician') {
       const activeJobs = await prisma.job.count({
         where: {
           status: {
@@ -83,7 +83,7 @@ router.get('/counts', authenticateToken, async (req, res) => {
         }
       });
       counts.active_jobs = activeJobs;
-      console.log('Active jobs count for user:', activeJobs);
+      console.log('Active jobs count for user/technician:', activeJobs);
     }
 
     console.log(`Notification counts for ${role}:`, counts);

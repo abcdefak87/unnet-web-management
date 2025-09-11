@@ -22,7 +22,8 @@ async function main() {
     const superAdminPassword = await bcrypt.hash('super123', 10);
     const superAdmin = await prisma.user.create({
       data: {
-        email: 'superadmin',
+        username: 'superadmin',
+        email: 'superadmin@example.com',
         password: superAdminPassword,
         name: 'Super Administrator',
         role: 'superadmin',
@@ -35,7 +36,8 @@ async function main() {
     const adminPassword = await bcrypt.hash('admin123', 10);
     const admin = await prisma.user.create({
       data: {
-        email: 'admin',
+        username: 'admin',
+        email: 'admin@example.com',
         password: adminPassword,
         name: 'Administrator',
         role: 'admin',
@@ -48,7 +50,8 @@ async function main() {
     const inventoryPassword = await bcrypt.hash('gudang123', 10);
     const inventoryAdmin = await prisma.user.create({
       data: {
-        email: 'gudang',
+        username: 'gudang',
+        email: 'gudang@example.com',
         password: inventoryPassword,
         name: 'Inventory Administrator',
         role: 'gudang',
@@ -61,7 +64,8 @@ async function main() {
     const userPassword = await bcrypt.hash('user123', 10);
     const regularUser = await prisma.user.create({
       data: {
-        email: 'userbiasa',
+        username: 'userbiasa',
+        email: 'userbiasa@example.com',
         password: userPassword,
         name: 'Regular User',
         role: 'user',
@@ -81,7 +85,6 @@ async function main() {
       data: {
         name: 'John Doe',
         phone: '081234567890',
-        telegramChatId: '123456789',
         isActive: true,
         isAvailable: true,
         isAdmin: true  // Admin technician
@@ -92,7 +95,6 @@ async function main() {
       data: {
         name: 'Jane Smith',
         phone: '081234567891',
-        telegramChatId: '987654321',
         isActive: true,
         isAvailable: true,
         isAdmin: false  // Regular technician

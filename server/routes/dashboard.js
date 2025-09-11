@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+// PrismaClient imported from utils/database
 const { authenticateToken } = require('../middleware/auth');
 
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
 // Get dashboard statistics
 router.get('/stats', authenticateToken, async (req, res) => {
@@ -16,16 +16,25 @@ router.get('/stats', authenticateToken, async (req, res) => {
       totalTechnicians,
       activeTechnicians,
       totalInventoryItems,
-      lowStockItems
+      lowStockItems,
+      psbPending,
+      psbCompleted,
+      gangguanPending,
+      gangguanCompleted
     ] = await Promise.all([
       prisma.customer.count(),
       prisma.job.count(),
-      prisma.job.count({ where: { status: { in: ['pending', 'in_progress'] } } }),
-      prisma.job.count({ where: { status: 'completed' } }),
+      // Match actual status enums used across the app
+      prisma.job.count({ where: { status: { in: ['OPEN', 'ASSIGNED', 'IN_PROGRESS'] } } }),
+      prisma.job.count({ where: { status: 'COMPLETED' } }),
       prisma.technician.count(),
-      prisma.technician.count({ where: { status: 'active' } }),
-      prisma.inventoryItem.count(),
-      prisma.inventoryItem.count({ where: { quantity: { lte: 10 } } })
+      prisma.technician.count({ where: { isActive: true } }),
+      prisma.item.count(),
+      prisma.item.count({ where: { currentStock: { lte: 10 } } }),
+      prisma.job.count({ where: { category: 'PSB', status: { in: ['OPEN','ASSIGNED','IN_PROGRESS'] } } }),
+      prisma.job.count({ where: { category: 'PSB', status: 'COMPLETED' } }),
+      prisma.job.count({ where: { category: 'GANGGUAN', status: { in: ['OPEN','ASSIGNED','IN_PROGRESS'] } } }),
+      prisma.job.count({ where: { category: 'GANGGUAN', status: 'COMPLETED' } })
     ]);
 
     res.json({
@@ -44,11 +53,13 @@ router.get('/stats', authenticateToken, async (req, res) => {
       inventory: {
         total: totalInventoryItems,
         lowStock: lowStockItems
-      }
+      },
+      psb: { pending: psbPending, completed: psbCompleted },
+      gangguan: { pending: gangguanPending, completed: gangguanCompleted }
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
+    res.status(500).json({ error: 'Gagal mengambil statistik dashboard' });
   }
 });
 
@@ -83,7 +94,7 @@ router.get('/activities', authenticateToken, async (req, res) => {
     res.json(activities);
   } catch (error) {
     console.error('Dashboard activities error:', error);
-    res.status(500).json({ error: 'Failed to fetch recent activities' });
+    res.status(500).json({ error: 'Gagal mengambil aktivitas terbaru' });
   }
 });
 
@@ -135,7 +146,7 @@ router.get('/revenue', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Dashboard revenue error:', error);
-    res.status(500).json({ error: 'Failed to fetch revenue data' });
+    res.status(500).json({ error: 'Gagal mengambil data pendapatan' });
   }
 });
 

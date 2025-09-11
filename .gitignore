@@ -44,6 +44,9 @@ server/prisma/dev.db
 server/uploads/
 uploads/
 
+# Local runtime data (WhatsApp sessions, QR, etc.)
+.data/
+
 # Logs
 logs
 *.log
@@ -103,6 +106,28 @@ public
 # Temporary folders
 tmp/
 temp/
+
+# WhatsApp session files (sensitive)
+server/auth_info_baileys/
+scripts/server/auth_info_baileys/
+server/public/qr/
+whatsapp-status.json
+
+# Build artifacts
+*.tsbuildinfo
+.next/
+.next/cache/
+out/
+build/
+dist/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+server/.env
+client/.env.local
 
 # Editor directories and files
 .vscode/*

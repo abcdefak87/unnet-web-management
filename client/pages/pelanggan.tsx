@@ -137,75 +137,17 @@ function EditCustomerModal({ isOpen, onClose, customer, onCustomerUpdated }: Edi
   )
 }
 
-interface DeleteConfirmModalProps {
-  isOpen: boolean
-  onClose: () => void
-  customer: Customer | null
-  onCustomerDeleted: () => void
-}
-
-function DeleteConfirmModal({ isOpen, onClose, customer, onCustomerDeleted }: DeleteConfirmModalProps) {
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handleDeleteCustomer = async (customerId: string) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus pelanggan ini?')) {
-      return
-    }
-
-    try {
-      await api.delete(`/customers/${customerId}`)
-      toast.success('Pelanggan berhasil dihapus')
-      // Real-time update will handle the UI refresh automatically
-    } catch (error: any) {
-      console.error('Error deleting customer:', error)
-      const message = error.response?.data?.error || 'Gagal menghapus pelanggan'
-      toast.error(message)
-    } finally {
-      setIsLoading(false)
-    }
+// One-click delete - no confirmation, no validation
+const handleDeleteCustomer = async (customer: Customer) => {
+  try {
+    await api.delete(`/customers/${customer.id}`)
+    toast.success(`Pelanggan "${customer.name}" berhasil dihapus`)
+    // Real-time update will handle the UI refresh automatically
+  } catch (error: any) {
+    console.error('Error deleting customer:', error)
+    const message = error.response?.data?.error || 'Gagal menghapus pelanggan'
+    toast.error(message)
   }
-
-  if (!isOpen || !customer) return null
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal">
-        <div className="modal-header">
-          <h2 className="modal-title">Konfirmasi Hapus</h2>
-        </div>
-        
-        <div className="modal-body">
-          <p className="text-sm text-gray-600">
-            Apakah Anda yakin ingin menghapus pelanggan <strong>{customer.name}</strong>?
-            Tindakan ini tidak dapat dibatalkan.
-          </p>
-        </div>
-        
-        <div className="modal-footer">
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-outline"
-            disabled={isLoading}
-          >
-            Batal
-          </button>
-          <button
-            onClick={() => {
-              setIsLoading(true)
-              handleDeleteCustomer(customer.id)
-              onCustomerDeleted()
-              onClose()
-            }}
-            disabled={isLoading}
-            className="btn-danger"
-          >
-            {isLoading ? 'Menghapus...' : 'Hapus'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 export default function PelangganPage() {
@@ -215,32 +157,42 @@ export default function PelangganPage() {
   const [itemsPerPage] = useState(10)
   
   // Real-time data hook
-  const { data: customers, loading, updateData, refetch } = useRealtimeData<Customer>({
+  const { data: customers, loading, error, updateData, refetch } = useRealtimeData<Customer>({
     endpoint: '/customers',
     dependencies: []
   })
   
   const { isConnected } = useRealtime()
   
-  // Filter customers based on search term
-  const filteredCustomers = customers.filter(customer =>
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.phone.includes(searchTerm) ||
-    customer.address.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filter customers based on search term - with safety check
+  const filteredCustomers = Array.isArray(customers) ? customers.filter(customer =>
+    customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer?.phone?.includes(searchTerm) ||
+    customer?.address?.toLowerCase().includes(searchTerm.toLowerCase())
+  ) : []
+
+  // Paginate filtered customers
+  const paginatedCustomers = filteredCustomers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   )
 
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
-  useEffect(() => {
-    refetch()
-  }, [])
+  // Remove this useEffect as it causes infinite loop
+  // The useRealtimeData hook already handles initial data fetching
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    setCurrentPage(1) // Reset to first page when searching
     refetch()
   }
+
+  // Reset to first page when search term changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   const handleCustomerAdded = (newCustomer: Customer) => {
     setShowAddModal(false)
@@ -253,10 +205,6 @@ export default function PelangganPage() {
     toast.success('Pelanggan berhasil diperbarui!')
   }
 
-  const handleCustomerDeleted = () => {
-    // Real-time update will handle removing the customer from the list
-    toast.success('Pelanggan berhasil dihapus!')
-  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
@@ -307,19 +255,38 @@ export default function PelangganPage() {
         </div>
 
         {/* Customer List */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H9m6 0a6 6 0 11-12 0 6 6 0 0112 0z" />
+        <div className="bg-white rounded-xl shadow-lg">
+          <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-xl">
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent flex items-center">
+              <svg className="h-6 w-6 mr-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               Daftar Pelanggan
             </h2>
+            <p className="mt-2 text-sm text-gray-600">Kelola data pelanggan ISP Anda dengan mudah</p>
           </div>
 
           {loading ? (
             <div className="flex-center h-64">
               <div className="loading-spinner w-12 h-12"></div>
+            </div>
+          ) : error ? (
+            <div className="flex-center h-64">
+              <div className="text-center">
+                <div className="text-red-600 mb-4">
+                  <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Gagal Memuat Data</h3>
+                <p className="text-gray-600 mb-4">{error}</p>
+                <button 
+                  onClick={() => refetch()}
+                  className="btn-primary"
+                >
+                  Coba Lagi
+                </button>
+              </div>
             </div>
           ) : filteredCustomers.length === 0 ? (
             <div className="text-center py-12">
@@ -341,7 +308,7 @@ export default function PelangganPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredCustomers.map((customer, index) => (
+                    {paginatedCustomers.map((customer, index) => (
                       <tr key={customer.id || `customer-${index}`}>
                         <td>
                           <div className="text-sm font-medium text-gray-900">{customer.name}</div>
@@ -376,12 +343,9 @@ export default function PelangganPage() {
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => {
-                                setSelectedCustomer(customer)
-                                setShowDeleteModal(true)
-                              }}
-                              className="p-1 text-red-600 rounded transition-colors duration-200 hover:text-red-900 hover:bg-red-50"
-                              title="Hapus pelanggan"
+                              onClick={() => handleDeleteCustomer(customer)}
+                              className="p-1 text-red-600 rounded transition-all duration-200 hover:text-white hover:bg-red-600 hover:scale-110 active:scale-95"
+                              title="Hapus pelanggan (one-click)"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -455,15 +419,6 @@ export default function PelangganPage() {
         onCustomerUpdated={handleCustomerUpdated}
       />
 
-      <DeleteConfirmModal
-        isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false)
-          setSelectedCustomer(null)
-        }}
-        customer={selectedCustomer}
-        onCustomerDeleted={handleCustomerDeleted}
-      />
     </Layout>
   )
 }

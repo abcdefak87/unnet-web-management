@@ -1,13 +1,12 @@
 import '../styles/globals.css'
 import type { AppProps } from 'next/app'
-import { QueryClient, QueryClientProvider } from 'react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '../contexts/AuthContext'
 import { RealtimeProvider } from '../contexts/RealtimeContext'
 import ErrorBoundary from '../components/ErrorBoundary'
-import { suppressRouterErrors } from '../lib/errorSuppressor'
-import { disableErrorOverlay } from '../lib/disableErrorOverlay'
-import { aggressiveErrorSuppression } from '../lib/aggressiveErrorSuppression'
+import { suppressRouterErrors } from '../lib/routerErrorSuppression'
+import { preloadCriticalComponents } from '../lib/dynamicComponents'
 import { useState, useEffect } from 'react'
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -16,6 +15,8 @@ export default function App({ Component, pageProps }: AppProps) {
       queries: {
         retry: 1,
         refetchOnWindowFocus: false,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
       },
     },
   }))
@@ -23,8 +24,11 @@ export default function App({ Component, pageProps }: AppProps) {
   // Global error suppressor for Next.js router errors
   useEffect(() => {
     suppressRouterErrors()
-    disableErrorOverlay()
-    aggressiveErrorSuppression()
+  }, [])
+
+  // Preload critical components for better performance
+  useEffect(() => {
+    preloadCriticalComponents()
   }, [])
 
   return (

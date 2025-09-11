@@ -1,88 +1,155 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '../components/Layout'
 import ProtectedRoute from '../components/ProtectedRoute'
+import EmptyState from '../components/EmptyState'
+import { DashboardSkeleton } from '../components/SkeletonLoader'
+import { LoadingErrorFallback } from '../components/ErrorFallback'
 import { useAuth } from '../contexts/AuthContext'
-import { api } from '../lib/api'
+import { api, customersAPI } from '../lib/api'
 import websocketService from '../lib/websocket'
-import { 
-  Users, 
-  Wrench, 
-  AlertTriangle, 
-  CheckCircle, 
-  Clock, 
-  TrendingUp,
-  Wifi,
-  Server,
-  DollarSign,
-  Package,
-  Briefcase
-} from 'lucide-react'
+import { OptimizedIcons } from '../lib/optimizedIcons'
+import { Suspense } from 'react'
+import { Users } from 'lucide-react'
 
-// Loading skeleton component
+// Enhanced loading skeleton component with modern design
 const StatCardSkeleton = () => (
-  <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 animate-pulse">
+  <div className="card card-hover-lift animate-pulse">
     <div className="flex items-center justify-between">
-      <div>
+      <div className="flex-1">
         <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-        <div className="h-8 bg-gray-200 rounded w-16"></div>
+        <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
+        <div className="h-3 bg-gray-200 rounded w-20"></div>
       </div>
-      <div className="h-12 w-12 bg-gray-200 rounded-lg"></div>
-    </div>
-    <div className="mt-4">
-      <div className="h-3 bg-gray-200 rounded w-20"></div>
+      <div className="h-12 w-12 bg-gray-200 rounded-xl"></div>
     </div>
   </div>
 )
 
-// Error fallback component
-const ErrorFallback = ({ error, resetError }: { error: Error, resetError: () => void }) => (
-  <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-    <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-    <h3 className="text-lg font-semibold text-red-800 mb-2">Terjadi Kesalahan</h3>
-    <p className="text-red-600 mb-4">{error?.message || 'Gagal memuat data'}</p>
-    <button 
-      onClick={resetError}
-      className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+// Modern stat card component
+const StatCard = ({ stat, onClick }: { stat: any, onClick: () => void }) => {
+  const Icon = stat.icon
+  return (
+    <div 
+      className="card card-interactive card-hover-lift group cursor-pointer"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      title={`Klik untuk melihat ${stat.name.toLowerCase()}`}
     >
-      Coba Lagi
-    </button>
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-600 truncate">{stat.name}</p>
+          <p className="mt-1 text-3xl font-bold text-gray-900">{stat.value ?? 0}</p>
+          <div className="mt-2">
+            <span className="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600">
+              {Number(stat.value) > 0 ? (stat.change || 'Tersedia') : 'Belum ada data'}
+            </span>
+          </div>
+        </div>
+        <div className={`flex h-12 w-12 flex-none items-center justify-center rounded-xl ${stat.color} text-white shadow-lg group-hover:scale-110 transition-transform duration-200`}>
+          <Icon className="h-6 w-6" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Enhanced error fallback component
+const ErrorFallback = ({ error, resetError }: { error: Error, resetError: () => void }) => (
+  <div className="card bg-red-50 border-red-200">
+    <div className="text-center">
+      <Suspense fallback={<div className="h-12 w-12 bg-gray-200 rounded animate-pulse mx-auto mb-4"></div>}>
+        <OptimizedIcons.AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+      </Suspense>
+      <h3 className="card-title text-red-800">Terjadi Kesalahan</h3>
+      <p className="card-body text-red-600 mb-4">{error?.message || 'Gagal memuat data'}</p>
+      <button 
+        onClick={resetError}
+        className="btn btn-danger"
+      >
+        Coba Lagi
+      </button>
+    </div>
   </div>
 )
 
 export default function Dashboard() {
+  const router = useRouter()
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  const resetError = () => {
-    setError(null)
-    setIsLoading(true)
-    fetchDashboard()
-  }
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isGudang = user?.role === 'gudang'
+  const isTech = user?.role === 'technician' || user?.role === 'user'
+  const [customers, setCustomers] = useState<any[]>([])
+  const [loadingCustomers, setLoadingCustomers] = useState(false)
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       setError(null)
       setIsLoading(true)
-      
+
       // Cancel previous request if exists
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
-      
+
       // Create new abort controller
       abortControllerRef.current = new AbortController()
-      
-      // Only fetch reports/dashboard - all roles can access this
-      const response = await api.get('/reports/dashboard', {
-        signal: abortControllerRef.current.signal
-      })
-      setDashboardData(response.data)
+
+      if (isAdmin) {
+        // Admin/superadmin use reports endpoint
+        const response = await api.get('/reports/dashboard', {
+          signal: abortControllerRef.current.signal
+        })
+        setDashboardData(response.data)
+      } else if (!isGudang) {
+        // Everyone except gudang uses dashboard stats endpoint
+        const res = await api.get('/dashboard/stats', {
+          signal: abortControllerRef.current.signal
+        })
+        const d = res.data || {}
+        // Normalize into the same shape used by the UI (response.data.data.stats ...)
+        const normalized = {
+          success: true,
+          data: {
+            stats: {
+              totalCustomers: d.customers?.total ?? 0,
+              totalTechnicians: d.technicians?.total ?? 0,
+              activeTechnicians: d.technicians?.active ?? 0,
+              lowStockItems: d.inventory?.lowStock ?? 0,
+              psbPending: d.psb?.pending ?? 0,
+              psbCompleted: d.psb?.completed ?? 0,
+              gangguanPending: d.gangguan?.pending ?? 0,
+              gangguanCompleted: d.gangguan?.completed ?? 0,
+              // Back-compat fields
+              openJobs: d.jobs?.pending ?? 0,
+              completedJobs: d.jobs?.completed ?? 0,
+              totalJobs: d.jobs?.total ?? 0,
+              todayJobs: 0,
+              thisMonthJobs: 0
+            },
+            recentJobs: [],
+            topTechnicians: []
+          }
+        }
+        setDashboardData(normalized)
+      } else {
+        // Gudang: no dashboard fetch
+        setDashboardData(null)
+      }
     } catch (err: any) {
       console.error('Error fetching dashboard data:', err)
-      // Handle specific error types
       if (err.name === 'AbortError' || err.message?.includes('Abort')) {
         console.log('Request was cancelled, ignoring error')
         return
@@ -91,9 +158,13 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [isAdmin, isGudang])
 
-  const { user } = useAuth()
+  const resetError = useCallback(() => {
+    setError(null)
+    setIsLoading(true)
+    fetchDashboard()
+  }, [fetchDashboard])
 
   useEffect(() => {
     // Only fetch if component is mounted and user exists
@@ -104,7 +175,36 @@ export default function Dashboard() {
       
       return () => clearTimeout(timer)
     }
-  }, [user])
+  }, [user, isAdmin, isGudang, fetchDashboard])
+
+  // Fetch customers (latest) for list - with debouncing to prevent rapid calls
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout
+    
+    const load = async () => {
+      try {
+        setLoadingCustomers(true)
+        const res = await customersAPI.getAll({ page: 1, limit: 6 })
+        const payload = res.data?.data
+        const list = payload?.customers || payload || []
+        setCustomers(Array.isArray(list) ? list.slice(0, 6) : [])
+      } catch (e) {
+        console.error('Fetch customers error:', e)
+        setCustomers([])
+      } finally {
+        setLoadingCustomers(false)
+      }
+    }
+    
+    // Debounce the API call to prevent rapid successive calls
+    timeoutId = setTimeout(load, 300)
+    
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+    }
+  }, [])
 
   // Setup WebSocket for real-time updates
   useEffect(() => {
@@ -113,94 +213,76 @@ export default function Dashboard() {
     // Connect to WebSocket
     websocketService.connect(user.id.toString(), user.role)
 
-    // Define callback functions
     const jobUpdateCallback = (data: any) => {
       console.log('Real-time job update:', data)
-      // Refresh dashboard data when jobs are updated
-      fetchDashboard()
+      if (!isGudang) fetchDashboard()
     }
 
     const inventoryUpdateCallback = (data: any) => {
       console.log('Real-time inventory update:', data)
-      // Refresh dashboard data when inventory changes
-      fetchDashboard()
+      if (!isGudang) fetchDashboard()
     }
 
-    // Listen for job updates
     websocketService.onJobUpdate(jobUpdateCallback)
-
-    // Listen for inventory updates
     websocketService.onInventoryUpdate(inventoryUpdateCallback)
 
     return () => {
       websocketService.offJobUpdate(jobUpdateCallback)
       websocketService.offInventoryUpdate(inventoryUpdateCallback)
-      // Cancel any pending requests when component unmounts
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
     }
-  }, [user])
+  }, [user, isGudang, fetchDashboard])
 
-  const stats = dashboardData?.data?.stats || {}
-  const recentJobs = dashboardData?.data?.recentJobs || []
-  const topTechnicians = dashboardData?.data?.topTechnicians || []
+  // Memoized data extraction untuk performa yang lebih baik
+  const { stats, recentJobs, topTechnicians } = useMemo(() => ({
+    stats: dashboardData?.data?.stats || {},
+    recentJobs: dashboardData?.data?.recentJobs || [],
+    topTechnicians: dashboardData?.data?.topTechnicians || []
+  }), [dashboardData])
 
-  // Kartu statistik utama - diorganisir dalam kategori
-  const primaryStats = [
+  // Memoized primary stats untuk performa yang lebih baik
+  const primaryStats = useMemo(() => [
     {
-      name: 'Total Pelanggan',
-      value: stats.totalCustomers || 0,
-      icon: Users,
+      name: 'Tiket PSB',
+      value: stats.psbPending || 0,
+      icon: OptimizedIcons.Ticket,
       color: 'bg-gradient-to-r from-blue-500 to-blue-600',
-      change: 'Terdaftar'
+      change: 'Menunggu pemasangan',
+      description: 'Orang yang mau pasang WiFi',
+      route: '/psb'
     },
     {
-      name: 'Total Pekerjaan',
-      value: stats.totalJobs || 0,
-      icon: Briefcase,
+      name: 'PSB Terpasang',
+      value: stats.psbCompleted || 0,
+      icon: OptimizedIcons.Wifi,
       color: 'bg-gradient-to-r from-green-500 to-green-600',
-      change: `+${stats.todayJobs || 0} hari ini`
+      change: 'Berhasil dipasang',
+      description: 'Yang sudah dipasang',
+      route: '/psb/completed'
     },
     {
-      name: 'Total Teknisi',
-      value: stats.totalTechnicians || 0,
-      icon: Users,
+      name: 'Tiket Gangguan',
+      value: stats.gangguanPending || 0,
+      icon: OptimizedIcons.WifiOff,
+      color: 'bg-gradient-to-r from-red-500 to-red-600',
+      change: 'Menunggu perbaikan',
+      description: 'Laporan gangguan WiFi',
+      route: '/gangguan'
+    },
+    {
+      name: 'Tiket Teratasi',
+      value: stats.gangguanCompleted || 0,
+      icon: OptimizedIcons.Shield,
       color: 'bg-gradient-to-r from-purple-500 to-purple-600',
-      change: `${stats.activeTechnicians || 0} aktif`
-    },
-    {
-      name: 'Pendapatan Bulanan',
-      value: `Rp ${(stats.monthlyRevenue || 0).toLocaleString()}`,
-      icon: TrendingUp,
-      color: 'bg-gradient-to-r from-yellow-500 to-orange-500',
-      change: '+15%'
+      change: 'Berhasil diperbaiki',
+      description: 'Yang sudah diperbaiki',
+      route: '/gangguan/completed'
     }
-  ]
+  ], [stats])
 
-  const operationalStats = [
-    {
-      name: 'Pekerjaan Terbuka',
-      value: stats.openJobs || 0,
-      icon: Clock,
-      color: 'bg-orange-500',
-      change: 'Menunggu teknisi'
-    },
-    {
-      name: 'Pekerjaan Selesai',
-      value: stats.completedJobs || 0,
-      icon: CheckCircle,
-      color: 'bg-green-500',
-      change: `${stats.thisMonthJobs || 0} bulan ini`
-    },
-    {
-      name: 'Stok Rendah',
-      value: stats.lowStockItems || 0,
-      icon: AlertTriangle,
-      color: 'bg-red-500',
-      change: 'Item perlu restock'
-    }
-  ]
+  // Informasi Sistem dan stok rendah dihilangkan dari dashboard ini
 
   const getStatusBadge = (status: string) => {
     const badges = {
@@ -213,269 +295,155 @@ export default function Dashboard() {
     return badges[status as keyof typeof badges] || 'badge-gray'
   }
 
-  const getTypeBadge = (type: string) => {
+  const getTypeBadge = (type: string, category: string) => {
+    if (category === 'PSB') return 'badge-info'
+    if (category === 'GANGGUAN') return 'badge-warning'
     return type === 'INSTALLATION' ? 'badge-info' : 'badge-warning'
+  }
+
+  const getCategoryLabel = (category: string) => {
+    return category === 'PSB' ? 'PSB' : 'Gangguan'
   }
 
   return (
     <ProtectedRoute>
       <Layout>
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 -mx-4 sm:-mx-6 md:-mx-8">
-          <div className="w-full">
-            <div className="space-y-6 py-4 px-2 sm:px-4">
-            {/* Header */}
-            <div className="mb-6">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-              <p className="text-gray-600">Ringkasan aktivitas dan performa sistem</p>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
+          <div className="container-responsive">
+            <div className="space-y-8 py-6">
+            {/* Modern Header */}
+            <div className="text-center sm:text-left">
+              <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+                Dashboard Tiket
+              </h1>
+              <p className="text-lg text-gray-600">Sistem manajemen tiket PSB dan gangguan WiFi</p>
             </div>
 
-            {/* Statistik Utama */}
-            <div className="mb-6">
-              <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 mr-2 text-blue-600" />
-                Ringkasan Utama
-              </h2>
-          {error ? (
-            <ErrorFallback error={error} resetError={resetError} />
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {isLoading ? (
-                // Show skeleton loading cards
-                Array.from({ length: 4 }).map((_, index) => (
-                  <StatCardSkeleton key={index} />
-                ))
+            {/* Modern Statistik Utama */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                  <Suspense fallback={<div className="h-6 w-6 mr-3 bg-gray-200 rounded animate-pulse"></div>}>
+                    <OptimizedIcons.Activity className="h-6 w-6 mr-3 text-blue-600" />
+                  </Suspense>
+                  Status Tiket
+                </h2>
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span>Real-time</span>
+                </div>
+              </div>
+              
+              {error ? (
+                <LoadingErrorFallback 
+                  retry={resetError} 
+                  message="Gagal memuat data dashboard" 
+                />
               ) : (
-                primaryStats.map((stat) => {
-                  const Icon = stat.icon
-                  return (
-                    <div 
-                      key={stat.name} 
-                      className="card-stats group cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                      tabIndex={0}
-                      role="button"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          // Handle card click/navigation
-                        }
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-600 mb-2 group-hover:text-gray-700 transition-colors">
-                            {stat.name}
-                          </p>
-                          <p className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-                            {stat.value}
-                          </p>
-                          <div className="flex items-center text-sm">
-                            <span className="text-green-600 font-medium bg-green-50 px-2 py-1 rounded-full">
-                              {stat.change}
-                            </span>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+                  {isLoading ? (
+                    // Show skeleton loading cards
+                    Array.from({ length: 4 }).map((_, index) => (
+                      <StatCardSkeleton key={index} />
+                    ))
+                  ) : (
+                    primaryStats.map((stat) => (
+                      <StatCard 
+                        key={stat.name} 
+                        stat={stat} 
+                        onClick={() => router.push(stat.route)} 
+                      />
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Informasi Sistem dihapus */}
+
+            {/* Modern Daftar Pelanggan */}
+            <div className="card card-hover-lift">
+              <div className="card-header bg-gradient-to-r from-blue-50 to-indigo-50 -mx-6 -mt-6 mb-6 rounded-t-xl p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent flex items-center">
+                      <Suspense fallback={<div className="h-5 w-5 mr-2 bg-gray-200 rounded animate-pulse"></div>}>
+                        <OptimizedIcons.Users className="h-5 w-5 mr-2 text-blue-600" />
+                      </Suspense>
+                      Daftar Pelanggan
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-600">Pelanggan terbaru yang terdaftar</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Suspense fallback={<div className="h-4 w-4 bg-gray-200 rounded animate-pulse"></div>}>
+                      <OptimizedIcons.TrendingUp className="h-4 w-4 text-green-500" />
+                    </Suspense>
+                    <span className="text-sm text-gray-500">{customers.length} pelanggan</span>
+                  </div>
+                </div>
+              </div>
+              <div className="card-body">
+                {loadingCustomers ? (
+                  <div className="space-y-4">
+                    {[1,2,3].map((i) => (
+                      <div key={i} className="flex items-center space-x-4">
+                        <div className="h-10 w-10 bg-gray-200 rounded-full animate-pulse"></div>
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-200 rounded w-1/3 animate-pulse"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : customers.length === 0 ? (
+                  <EmptyState
+                    icon={Users}
+                    title="Belum ada pelanggan"
+                    description="Belum ada data pelanggan yang terdaftar. Pelanggan akan muncul di sini setelah mendaftar."
+                    action={
+                      <button
+                        onClick={() => router.push('/pelanggan')}
+                        className="btn btn-primary"
+                      >
+                        <Suspense fallback={<div className="h-4 w-4 mr-2 bg-gray-200 rounded animate-pulse"></div>}>
+                          <OptimizedIcons.UserPlus className="h-4 w-4 mr-2" />
+                        </Suspense>
+                        Kelola Pelanggan
+                      </button>
+                    }
+                    size="sm"
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {customers.map((c: any) => (
+                      <div key={c.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center space-x-4">
+                          <div className="h-10 w-10 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold">
+                            {c.name?.charAt(0)?.toUpperCase() || '?'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{c.name || 'Tanpa Nama'}</p>
+                            <p className="text-xs text-gray-500 truncate">{c.phone || '-'} • {c.address || '-'}</p>
                           </div>
                         </div>
-                        <div className={`p-4 rounded-xl ${stat.color} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                          <Icon className="h-8 w-8 text-white" />
-                        </div>
+                        <button 
+                          onClick={() => router.push(`/pelanggan?id=${c.id}`)}
+                          className="btn btn-ghost btn-sm"
+                        >
+                          Detail
+                        </button>
                       </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          )}
-        </div>
-
-            {/* Statistik Operasional */}
-            <div className="mb-6">
-              <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-                <Server className="h-5 w-5 sm:h-6 sm:w-6 mr-2 text-green-600" />
-                Status Operasional
-              </h2>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {operationalStats.map((stat) => {
-              const Icon = stat.icon
-              return (
-                <div key={stat.name} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 p-4 sm:p-5 border border-gray-100 hover:border-gray-200 transform hover:-translate-y-1">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <div className={`p-2 sm:p-3 rounded-lg ${stat.color}`}>
-                        <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-                      </div>
-                    </div>
-                    <div className="ml-3 sm:ml-4 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">
-                          {stat.name}
-                        </dt>
-                        <dd className="text-xl sm:text-2xl font-bold text-gray-900">
-                          {stat.value}
-                        </dd>
-                        <dd className="text-sm text-gray-500">
-                          {stat.change}
-                        </dd>
-                      </dl>
-                    </div>
+                    ))}
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              {/* Recent Jobs */}
-              <div className="bg-white rounded-lg shadow-md border border-gray-100">
-                <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">
-                  <h3 className="text-lg sm:text-xl font-semibold text-gray-900 flex items-center">
-                    <Briefcase className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600" />
-                    Pekerjaan Terbaru
-                  </h3>
-                </div>
-            <div className="divide-y divide-gray-200">
-              {isLoading ? (
-                <div className="p-4 sm:p-6 text-center">
-                  <div className="loading-spinner h-8 w-8 mx-auto"></div>
-                </div>
-              ) : recentJobs.length === 0 ? (
-                <div className="p-4 sm:p-6 text-center text-gray-500">
-                  Belum ada pekerjaan
-                </div>
-              ) : (
-                recentJobs.slice(0, 5).map((job: any) => (
-                  <div key={job.id} className="table-row px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <div className="flex items-center space-x-2 flex-wrap">
-                          <p className="text-sm font-medium text-gray-900">
-                            {job.jobNumber}
-                          </p>
-                          <span className={`badge ${getTypeBadge(job.type)}`}>
-                            {job.type === 'INSTALLATION' ? 'Pemasangan' : 'Perbaikan'}
-                          </span>
-                          <span className={`badge ${getStatusBadge(job.status)}`}>
-                            {job.status}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          {job.customer?.name || 'Customer tidak ditemukan'} - {job.address}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(job.createdAt).toLocaleDateString('id-ID')}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="px-6 py-3 border-t border-gray-200">
-              <a
-                href="/jobs"
-                className="text-sm font-medium text-primary-600 hover:text-primary-500"
-              >
-                Lihat semua pekerjaan →
-              </a>
-            </div>
-          </div>
-
-              {/* Top Technicians */}
-              <div className="bg-white rounded-lg shadow-md border border-gray-100">
-                <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50 rounded-t-lg">
-                  <h3 className="text-lg sm:text-xl font-semibold text-gray-900 flex items-center">
-                    <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-green-600" />
-                    Teknisi Terbaik
-                  </h3>
-                </div>
-            <div className="divide-y divide-gray-200">
-              {isLoading ? (
-                <div className="p-4 sm:p-6 text-center">
-                  <div className="loading-spinner h-8 w-8 mx-auto"></div>
-                </div>
-              ) : topTechnicians.length === 0 ? (
-                <div className="p-4 sm:p-6 text-center text-gray-500">
-                  Belum ada data teknisi
-                </div>
-              ) : (
-                topTechnicians.slice(0, 5).map((tech: any, index: number) => (
-                  <div key={tech.id} className="table-row px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="flex-shrink-0">
-                          <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
-                            <span className="text-sm font-semibold text-primary-600">
-                              #{index + 1}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <p className="text-sm font-medium text-gray-900">
-                            {tech.name}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            {tech.phone}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right space-y-1">
-                        <p className="text-sm font-medium text-gray-900">
-                          {tech._count?.jobAssignments || 0} pekerjaan
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          selesai
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="px-6 py-3 border-t border-gray-200">
-              <a
-                href="/technicians"
-                className="text-sm font-medium text-primary-600 hover:text-primary-500"
-              >
-                Lihat semua teknisi →
-              </a>
-            </div>
-          </div>
-        </div>
-
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow-md border border-gray-100 p-4 sm:p-6">
-              <h3 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-4 sm:mb-6 flex items-center">
-                <Wifi className="h-5 w-5 sm:h-6 sm:w-6 mr-2 text-purple-600" />
-                Aksi Cepat
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <a
-                  href="/jobs/create"
-                  className="flex items-center justify-center px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg font-medium text-sm sm:text-base"
+                )}
+              </div>
+              <div className="card-footer">
+                <button 
+                  onClick={() => router.push('/pelanggan')}
+                  className="btn btn-outline w-full"
                 >
-                  <Briefcase className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                  Buat Pekerjaan Baru
-                </a>
-                <a
-                  href="/technicians"
-                  className="flex items-center justify-center px-4 sm:px-6 py-3 sm:py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg font-medium text-sm sm:text-base"
-                >
-                  <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                  Kelola Teknisi
-                </a>
-                <a
-                  href="/inventory"
-                  className="flex items-center justify-center px-4 sm:px-6 py-3 sm:py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg font-medium text-sm sm:text-base"
-                >
-                  <Package className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                  Kelola Inventori
-                </a>
-                <a
-                  href="/reports"
-                  className="flex items-center justify-center px-4 sm:px-6 py-3 sm:py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg font-medium text-sm sm:text-base"
-                >
-                  <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                  Lihat Laporan
-                </a>
+                  Lihat semua pelanggan →
+                </button>
               </div>
             </div>
             </div>

@@ -9,7 +9,7 @@ interface User {
   id: string
   email: string
   name: string
-  role: 'superadmin' | 'admin' | 'gudang' | 'user'
+  role: 'superadmin' | 'admin' | 'gudang' | 'user' | 'technician'
 }
 
 interface AuthContextType {

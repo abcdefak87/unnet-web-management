@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import { useAuth } from '../../../contexts/AuthContext'
 import Layout from '../../../components/Layout'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import Breadcrumb from '../../../components/Breadcrumb'
 import { api } from '../../../lib/api'
 import { 
   ArrowLeft,
@@ -171,6 +172,13 @@ export default function JobDetail() {
     <ProtectedRoute>
       <Layout>
         <div className="space-y-6">
+          {/* Breadcrumb */}
+          <Breadcrumb 
+            items={[
+              { name: 'Pekerjaan', href: '/jobs' },
+              { name: `Tiket ${job?.jobNumber}`, current: true }
+            ]} 
+          />
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">

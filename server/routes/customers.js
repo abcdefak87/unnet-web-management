@@ -1,16 +1,34 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const { PrismaClient } = require('@prisma/client');
+// PrismaClient imported from utils/database
 const { authenticateToken, requireRole, requirePermission } = require('../middleware/auth');
 const { PERMISSIONS } = require('../utils/permissions');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+
+// Import security middleware
+const {
+  registrationRateLimit,
+  sanitizeRegistrationInput,
+  validateGPS,
+  validateUploadedFiles,
+  sanitizeErrorResponse,
+  auditRegistrationAttempt,
+  generateCSRFToken,
+  validateCSRFToken
+} = require('../middleware/registrationSecurity');
+
+// Import enhanced file security
+const { enhancedFileValidation, cleanupUploadedFiles } = require('../middleware/fileSecurity');
+
+// Email verification service removed - no longer required
 
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
-// Configure multer for customer registration uploads
+// Enhanced multer configuration for customer registration uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = 'uploads/customers/';
@@ -20,22 +38,45 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    // Generate secure filename with crypto
+    const uniqueSuffix = crypto.randomBytes(16).toString('hex');
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `${file.fieldname}-${uniqueSuffix}-${sanitizedName}`);
   }
 });
 
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 2 // Maximum 2 files (KTP and house photo)
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'));
+    // Allow files to be optional
+    if (!file) {
+      return cb(null, true);
     }
+    
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    
+    // Check MIME type
+    if (!allowedTypes.includes(file.mimetype)) {
+      return cb(new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.'));
+    }
+    
+    // Check file extension
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      return cb(new Error('Invalid file extension. Only .jpg, .jpeg, .png, and .webp files are allowed.'));
+    }
+    
+    // Check for suspicious file names
+    if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+      return cb(new Error('Invalid file name. File name contains invalid characters.'));
+    }
+    
+    cb(null, true);
   }
 });
 
@@ -105,17 +146,17 @@ router.get('/', authenticateToken, requirePermission('customers:view'), [
     
     // Handle specific Prisma errors
     if (error.code === 'P2025') {
-      return res.status(404).json({ error: 'No customers found' });
+      return res.status(404).json({ error: 'Tidak ada pelanggan ditemukan' });
     }
     
     // Handle search query errors
     if (error.message.includes('Invalid') || error.message.includes('contains')) {
-      return res.status(400).json({ error: 'Invalid search query' });
+      return res.status(400).json({ error: 'Query pencarian tidak valid' });
     }
     
     res.status(500).json({ 
       success: false,
-      error: 'Failed to fetch customers',
+      error: 'Gagal mengambil data pelanggan',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -143,13 +184,13 @@ router.get('/:id', authenticateToken, async (req, res) => {
     });
 
     if (!customer) {
-      return res.status(404).json({ error: 'Customer not found' });
+      return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
     }
 
     res.json({ customer });
   } catch (error) {
     console.error('Get customer error:', error);
-    res.status(500).json({ error: 'Failed to fetch customer' });
+    res.status(500).json({ error: 'Gagal mengambil data pelanggan' });
   }
 });
 
@@ -158,15 +199,6 @@ router.post('/', authenticateToken, requirePermission('customers:create'), [
   body('name').isLength({ min: 2 }).trim(),
   body('phone').notEmpty().trim(),
   body('address').isLength({ min: 5 }).trim(),
-  body('email').optional().custom((value) => {
-    if (value && value.trim() !== '') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(value)) {
-        throw new Error('Format email tidak valid');
-      }
-    }
-    return true;
-  }),
   // KTP validation for new installations
   body('ktpName').optional().isLength({ min: 2 }).trim(),
   body('ktpNumber').optional().isLength({ min: 14, max: 16 }).trim(),
@@ -180,7 +212,7 @@ router.post('/', authenticateToken, requirePermission('customers:create'), [
     if (!errors.isEmpty()) {
       console.error('Customer validation errors:', errors.array());
       return res.status(400).json({ 
-        error: 'Validation failed',
+        error: 'Validasi gagal',
         details: errors.array(),
         message: errors.array().map(e => `${e.path}: ${e.msg}`).join(', ')
       });
@@ -190,7 +222,6 @@ router.post('/', authenticateToken, requirePermission('customers:create'), [
       name, 
       phone, 
       address, 
-      email,
       latitude,
       longitude,
       ktpName,
@@ -216,7 +247,6 @@ router.post('/', authenticateToken, requirePermission('customers:create'), [
         name,
         phone,
         address,
-        email: email && email.trim() !== '' ? email.trim() : null,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
         ktpName: ktpName || null,
@@ -246,7 +276,7 @@ router.post('/', authenticateToken, requirePermission('customers:create'), [
     res.status(201).json(customer);
   } catch (error) {
     console.error('Create customer error:', error);
-    res.status(500).json({ error: 'Failed to create customer' });
+    res.status(500).json({ error: 'Gagal membuat pelanggan' });
   }
 });
 
@@ -255,15 +285,6 @@ router.put('/:id', authenticateToken, requirePermission('customers:edit'), [
   body('name').isLength({ min: 2 }).trim().optional(),
   body('phone').notEmpty().trim().optional(),
   body('address').isLength({ min: 5 }).trim().optional(),
-  body('email').optional().custom((value) => {
-    if (value && value.trim() !== '') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(value)) {
-        throw new Error('Format email tidak valid');
-      }
-    }
-    return true;
-  })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -271,13 +292,12 @@ router.put('/:id', authenticateToken, requirePermission('customers:edit'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, phone, address, email } = req.body;
+    const { name, phone, address } = req.body;
     const updateData = {};
 
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
     if (address) updateData.address = address;
-    if (email !== undefined) updateData.email = email && email.trim() !== '' ? email.trim() : null;
 
     const customer = await prisma.customer.update({
       where: { id: req.params.id },
@@ -293,33 +313,21 @@ router.put('/:id', authenticateToken, requirePermission('customers:edit'), [
 
     res.json({ 
       success: true,
-      message: 'Customer updated successfully', 
+      message: 'Pelanggan berhasil diperbarui', 
       data: { customer }
     });
   } catch (error) {
     console.error('Update customer error:', error);
     if (error.code === 'P2025') {
-      return res.status(404).json({ error: 'Customer not found' });
+      return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
     }
-    res.status(500).json({ error: 'Failed to update customer' });
+    res.status(500).json({ error: 'Gagal memperbarui pelanggan' });
   }
 });
 
-// Delete customer
+// Delete customer - simplified (validation moved to client)
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
-    // Check if customer has jobs
-    const jobCount = await prisma.job.count({
-      where: { customerId: req.params.id }
-    });
-
-    if (jobCount > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete customer with existing jobs',
-        details: `Customer has ${jobCount} job(s). Please complete or reassign jobs first.`
-      });
-    }
-
     const customer = await prisma.customer.delete({
       where: { id: req.params.id }
     });
@@ -333,160 +341,310 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 
     res.json({ 
       success: true,
-      message: 'Customer deleted successfully' 
+      message: 'Pelanggan berhasil dihapus' 
     });
   } catch (error) {
     console.error('Delete customer error:', error);
     if (error.code === 'P2025') {
-      return res.status(404).json({ error: 'Customer not found' });
+      return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
     }
-    res.status(500).json({ error: 'Failed to delete customer' });
+    res.status(500).json({ error: 'Gagal menghapus pelanggan' });
   }
 });
 
-// Customer registration endpoint (public - no auth required)
-router.post('/register', upload.fields([
-  { name: 'ktpPhoto', maxCount: 1 },
-  { name: 'housePhoto', maxCount: 1 }
-]), [
-  body('name').isLength({ min: 1 }).trim().withMessage('Nama wajib diisi'),
-  body('phone').isMobilePhone('id-ID').withMessage('Nomor HP tidak valid'),
-  body('address').isLength({ min: 10 }).trim().withMessage('Alamat minimal 10 karakter'),
-  body('ktpNumber').isLength({ min: 14, max: 16 }).isNumeric().withMessage('Nomor KTP harus 14-16 digit angka'),
-  body('ktpName').isLength({ min: 1 }).trim().withMessage('Nama sesuai KTP wajib diisi'),
-  body('ktpAddress').isLength({ min: 10 }).trim().withMessage('Alamat KTP minimal 10 karakter'),
-  body('packageType').isIn(['10MBPS', '20MBPS', '50MBPS', '100MBPS']).withMessage('Paket tidak valid')
+// Get CSRF token for registration form
+router.get('/register/csrf-token', generateCSRFToken, (req, res) => {
+  try {
+    console.log('CSRF token endpoint called:', {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      hasToken: !!req.csrfToken,
+      timestamp: new Date().toISOString()
+    });
+    
+    if (!req.csrfToken) {
+      console.error('CSRF token not generated');
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to generate CSRF token'
+      });
+    }
+    
+    res.json({
+      success: true,
+      csrfToken: req.csrfToken,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('CSRF token endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+// Test endpoint to verify CSRF token is working
+router.get('/register/test-csrf', generateCSRFToken, (req, res) => {
+  res.json({
+    success: true,
+    message: 'CSRF endpoint is working',
+    csrfToken: req.csrfToken,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Debug endpoint to test form data parsing
+router.post('/register/debug', upload.any(), (req, res) => {
+  console.log('=== DEBUG ENDPOINT ===');
+  console.log('Body:', req.body);
+  console.log('Files:', req.files);
+  console.log('Headers:', req.headers);
+  console.log('=====================');
+  
+  res.json({
+    success: true,
+    message: 'Debug endpoint working',
+    receivedData: {
+      body: req.body,
+      files: req.files,
+      bodyKeys: Object.keys(req.body || {}),
+      bodyValues: Object.values(req.body || {})
+    }
+  });
+});
+
+// Simple test endpoint without middleware
+router.post('/register/simple', upload.any(), [
+  body('name').isLength({ min: 2 }).trim().withMessage('Nama harus minimal 2 karakter'),
+  body('phone').notEmpty().trim().withMessage('Nomor HP wajib diisi'),
+  body('packageType').isIn(['10MBPS', '20MBPS', '50MBPS', '100MBPS']).withMessage('Paket internet wajib dipilih')
 ], async (req, res) => {
   try {
-    console.log('=== CUSTOMER REGISTRATION ===');
-    console.log('Request body:', req.body);
+    console.log('=== SIMPLE REGISTRATION TEST ===');
+    console.log('Body:', req.body);
     console.log('Files:', req.files);
+    console.log('================================');
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('Validation errors:', errors.array());
       return res.status(400).json({ 
+        success: false,
         error: 'Data tidak valid', 
-        details: errors.array() 
+        details: errors.array().map(e => ({ field: e.param, message: e.msg })) 
       });
     }
 
-    const {
-      name, phone, address, ktpNumber, ktpName, 
-      ktpAddress, shareLocation, packageType, installationType
-    } = req.body;
-
-    // Check if customer already exists
-    const existingCustomer = await prisma.customer.findFirst({
-      where: {
-        OR: [
-          { phone: phone },
-          { ktpNumber: ktpNumber }
-        ]
-      }
+    res.json({
+      success: true,
+      message: 'Test registrasi sederhana berhasil',
+      data: req.body
     });
 
-    if (existingCustomer) {
-      return res.status(400).json({
-        error: 'Pelanggan sudah terdaftar',
-        details: 'Nomor HP atau KTP sudah digunakan'
-      });
-    }
-
-    // Prepare customer data
-    const customerData = {
-      name: name.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      ktpNumber: ktpNumber.trim(),
-      ktpName: ktpName.trim(),
-      ktpAddress: ktpAddress.trim(),
-      shareLocation: shareLocation?.trim() || null,
-      installationType: installationType || 'NEW_INSTALLATION',
-      isVerified: false, // Will be verified by admin
-      registrationStatus: 'PENDING', // PENDING, APPROVED, REJECTED
-      packageType: packageType,
-      registeredAt: new Date()
-    };
-
-    // Add photo URLs if uploaded
-    if (req.files?.ktpPhoto) {
-      customerData.ktpPhotoUrl = `/uploads/customers/${req.files.ktpPhoto[0].filename}`;
-    }
-    if (req.files?.housePhoto) {
-      customerData.housePhotoUrl = `/uploads/customers/${req.files.housePhoto[0].filename}`;
-    }
-
-    console.log('Creating customer with data:', customerData);
-
-    // Create customer record
-    const customer = await prisma.customer.create({
-      data: customerData
+  } catch (error) {
+    console.error('Simple registration error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Registrasi gagal',
+      message: error.message
     });
+  }
+});
 
-    // Auto-create installation job
-    const jobCount = await prisma.job.count();
-    const jobNumber = `REG-${Date.now()}-${String(jobCount + 1).padStart(4, '0')}`;
-
-    const job = await prisma.job.create({
-      data: {
-        jobNumber,
-        type: 'INSTALLATION',
-        title: `Instalasi ${packageType} - ${name}`,
-        description: `Instalasi paket ${packageType} untuk pelanggan baru`,
-        address: address,
-        customerId: customer.id,
-        status: 'OPEN',
-        priority: 'MEDIUM',
-        housePhotoUrl: customerData.housePhotoUrl,
-        idCardPhotoUrl: customerData.ktpPhotoUrl,
-        createdById: null // System created
-      }
-    });
-
-    // Send notification to admin via Telegram (if available)
+// Enhanced customer registration endpoint with comprehensive security (CAPTCHA removed)
+router.post('/register', 
+  registrationRateLimit, // Rate limiting
+  upload.any(), // Accept any files (more flexible)
+  enhancedFileValidation, // Enhanced file security
+  sanitizeRegistrationInput, // Input sanitization
+  validateCSRFToken, // CSRF protection
+  validateGPS, // GPS validation
+  auditRegistrationAttempt, // Audit logging
+  cleanupUploadedFiles, // Cleanup files after request
+  [
+    // Enhanced validation rules
+    body('name')
+      .isLength({ min: 2, max: 100 })
+      .trim()
+      .withMessage('Nama harus 2-100 karakter'),
+    
+    body('phone')
+      .customSanitizer(v => (v || '').toString().replace(/\s+/g, '').replace(/^\+62/, '0'))
+      .matches(/^0[0-9]{9,13}$/)
+      .withMessage('Nomor HP tidak valid. Gunakan format 08xxxxxxxxxx'),
+    
+    body('address')
+      .optional({ checkFalsy: true, nullable: true })
+      .isLength({ min: 0, max: 500 })
+      .trim()
+      .withMessage('Alamat maksimal 500 karakter'),
+    
+    body('ktpNumber')
+      .optional({ checkFalsy: true, nullable: true })
+      .matches(/^[0-9]{16}$/)
+      .withMessage('Nomor KTP harus 16 digit'),
+    
+    body('ktpName')
+      .optional({ checkFalsy: true, nullable: true })
+      .isLength({ min: 2, max: 100 })
+      .trim()
+      .withMessage('Nama KTP harus 2-100 karakter'),
+    
+    body('ktpAddress')
+      .optional({ checkFalsy: true, nullable: true })
+      .isLength({ min: 0, max: 500 })
+      .trim()
+      .withMessage('Alamat KTP maksimal 500 karakter'),
+    
+    body('packageType')
+      .isIn(['10MBPS', '20MBPS', '50MBPS', '100MBPS'])
+      .withMessage('Paket internet wajib dipilih'),
+    
+    body('installationType')
+      .optional()
+      .isIn(['NEW_INSTALLATION', 'RELOCATION', 'UPGRADE'])
+      .withMessage('Tipe instalasi tidak valid')
+  ],
+  async (req, res) => {
     try {
-      const EnhancedTelegramBot = require('../services/enhancedTelegramBot');
-      const bot = EnhancedTelegramBot.getInstance(process.env.TELEGRAM_BOT_TOKEN);
-      const adminMessage = `🆕 <b>PENDAFTARAN PELANGGAN BARU</b>
+      // Debug logging
+      console.log('=== REGISTRATION REQUEST DEBUG ===');
+      console.log('Body:', req.body);
+      console.log('Files:', req.files);
+      console.log('Headers:', req.headers);
+      console.log('===================================');
+
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        console.log('Validation errors:', errors.array());
+        return res.status(400).json({ 
+          success: false,
+          error: 'Data tidak valid', 
+          details: errors.array().map(e => ({ field: e.param, message: e.msg })) 
+        });
+      }
+
+      const {
+        name, phone, address, ktpNumber, ktpName,
+        ktpAddress, shareLocation, latitude, longitude, packageType, installationType
+      } = req.body;
+
+      // Use database transaction to prevent race conditions
+      const result = await prisma.$transaction(async (tx) => {
+        // Check for existing customer with unique constraints
+        const existingCustomer = await tx.customer.findFirst({
+          where: {
+            OR: [
+              { phone: phone },
+              ...(ktpNumber ? [{ ktpNumber: ktpNumber }] : [])
+            ]
+          }
+        });
+
+        if (existingCustomer) {
+          throw new Error('Customer already exists with this phone or KTP number');
+        }
+
+        // Prepare customer data with security fields
+        const customerData = {
+          name: name.trim(),
+          phone: phone.trim(),
+          address: (address || '').trim(),
+          ktpNumber: ktpNumber?.trim() || null,
+          ktpName: ktpName?.trim() || null,
+          ktpAddress: ktpAddress?.trim() || null,
+          shareLocation: shareLocation?.trim() || null,
+          latitude: latitude ? parseFloat(latitude) : null,
+          longitude: longitude ? parseFloat(longitude) : null,
+          installationType: installationType || 'NEW_INSTALLATION',
+          isVerified: true, // Auto-verify customers without email verification
+          registrationStatus: 'PENDING',
+          packageType: packageType,
+          registeredAt: new Date(),
+          registrationIP: req.ip,
+          userAgent: req.get('User-Agent')
+        };
+
+        // Add photo URLs
+        if (req.files?.ktpPhoto) {
+          customerData.ktpPhotoUrl = `/uploads/customers/${req.files.ktpPhoto[0].filename}`;
+        }
+        if (req.files?.housePhoto) {
+          customerData.housePhotoUrl = `/uploads/customers/${req.files.housePhoto[0].filename}`;
+        }
+
+        // Create customer record
+        const customer = await tx.customer.create({
+          data: customerData
+        });
+
+        // Auto-create PSB ticket
+        const jobCount = await tx.job.count();
+        const jobNumber = `PSB-${Date.now()}-${String(jobCount + 1).padStart(4, '0')}`;
+
+        const job = await tx.job.create({
+          data: {
+            jobNumber,
+            type: 'PSB',
+            category: 'PSB',
+            title: `Pemasangan WiFi - ${name}`,
+            description: `Tiket pemasangan WiFi untuk pelanggan baru`,
+            address: address,
+            customerId: customer.id,
+            status: 'OPEN',
+            priority: 'MEDIUM',
+            housePhotoUrl: customerData.housePhotoUrl,
+            idCardPhotoUrl: customerData.ktpPhotoUrl,
+            createdById: null
+          }
+        });
+
+        // Send notification to admin via WhatsApp (if available)
+        try {
+          const WhatsAppBot = require('../services/whatsapp/WhatsAppBot');
+          const bot = WhatsAppBot.getInstance();
+          const adminMessage = `🎫 *TIKET PSB BARU*
 
 👤 <b>Nama:</b> ${name}
 📞 <b>HP:</b> ${phone}
 📍 <b>Alamat:</b> ${address}
 📦 <b>Paket:</b> ${packageType}
-🆔 <b>KTP:</b> ${ktpNumber}
+🆔 <b>KTP:</b> ${ktpNumber || 'Tidak ada'}
 
-📋 <b>Job:</b> ${jobNumber}
-✅ <b>Status:</b> Menunggu persetujuan admin
+🎫 <b>Tiket:</b> ${jobNumber}
+📋 <b>Kategori:</b> PSB (Pasang WiFi)
+✅ <b>Status:</b> Menunggu pemasangan
 
-Silakan review dan approve pendaftaran ini.`;
+Silakan assign teknisi untuk pemasangan WiFi.`;
 
-      // Send to admin users (you can modify this to send to specific admin chat IDs)
-      console.log('Admin notification:', adminMessage);
-    } catch (telegramError) {
-      console.error('Telegram notification error:', telegramError);
+          console.log('Admin notification:', adminMessage);
+        } catch (whatsappError) {
+          console.error('WhatsApp notification error:', whatsappError);
+        }
+
+        return { customer, job };
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Pendaftaran berhasil! Kami akan menghubungi Anda dalam 1x24 jam.',
+        data: {
+          id: result.customer.id,
+          name: result.customer.name,
+          phone: result.customer.phone,
+          registrationStatus: result.customer.registrationStatus,
+          jobNumber: result.job.jobNumber
+        }
+      });
+
+    } catch (error) {
+      // Use error sanitization middleware
+      return sanitizeErrorResponse(error, req, res);
     }
-
-    res.status(201).json({
-      success: true,
-      message: 'Pendaftaran berhasil! Kami akan menghubungi Anda dalam 1x24 jam.',
-      data: {
-        id: customer.id,
-        name: customer.name,
-        phone: customer.phone,
-        registrationStatus: customer.registrationStatus,
-        jobNumber: job.jobNumber
-      }
-    });
-
-  } catch (error) {
-    console.error('Customer registration error:', error);
-    res.status(500).json({ 
-      error: 'Terjadi kesalahan saat mendaftar',
-      details: error.message 
-    });
   }
-});
+);
+
+// Email verification endpoints removed - no longer required
 
 // Get pending registrations (admin only)
 router.get('/registrations/pending', authenticateToken, requirePermission('customers:view'), async (req, res) => {
@@ -537,7 +695,7 @@ router.put('/registrations/:id/approve', authenticateToken, requirePermission('c
     if (job) {
       // Broadcast job to technicians
       try {
-        const { broadcastNewJob } = require('../utils/telegramJobIntegration');
+        const { broadcastNewJob } = require('../utils/whatsappJobIntegration');
         await broadcastNewJob(job);
       } catch (broadcastError) {
         console.error('Job broadcast error:', broadcastError);

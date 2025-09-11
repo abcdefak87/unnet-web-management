@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { useAuth } from '../../../contexts/AuthContext'
 import Layout from '../../../components/Layout'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import Breadcrumb from '../../../components/Breadcrumb'
 import { api } from '../../../lib/api'
 import { ArrowLeft, Save, MapPin, User, Phone, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -128,6 +129,13 @@ export default function EditJob() {
     <ProtectedRoute>
       <Layout title="Edit Pekerjaan">
         <div className="max-w-2xl mx-auto">
+          {/* Breadcrumb */}
+          <Breadcrumb 
+            items={[
+              { name: 'Pekerjaan', href: '/jobs' },
+              { name: 'Edit Tiket', current: true }
+            ]} 
+          />
           <div className="mb-6">
             <button
               onClick={() => router.back()}

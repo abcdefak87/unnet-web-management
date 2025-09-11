@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+// PrismaClient imported from utils/database
 const { authenticateToken } = require('../middleware/auth');
 
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
 // Get all team members (technicians)
 router.get('/', authenticateToken, async (req, res) => {

@@ -19,8 +19,10 @@ Sistem manajemen ISP yang lengkap dengan fitur keamanan tingkat enterprise dan a
 - ✅ Sistem job assignment otomatis
 - ✅ Inventory management dengan low stock alerts
 - ✅ Real-time notifications via WebSocket
-- ✅ Telegram bot integration untuk admin
+- ✅ WhatsApp bot integration dengan Baileys API
 - ✅ Comprehensive reporting system
+- ✅ Job broadcasting ke teknisi via WhatsApp
+- ✅ Two-way communication dengan customers
 
 ### 🎨 **User Experience**
 - ✅ Modern UI dengan Tailwind CSS
@@ -31,10 +33,11 @@ Sistem manajemen ISP yang lengkap dengan fitur keamanan tingkat enterprise dan a
 
 ## 🚀 **Quick Start**
 
-### **Setup Pertama Kali**
+### **Windows Development**
 ```bash
 # 1. Install dependencies
-npm run install-all
+npm install
+cd server && npm install && cd ..
 
 # 2. Setup database
 cd server
@@ -44,6 +47,46 @@ cd ..
 
 # 3. Start development
 npm run dev
+
+# 4. Start WhatsApp Bot
+scripts/batch/start-whatsapp.bat
+```
+
+### **Linux Production (Mobaxterm)**
+```bash
+# 1. Clone repository
+git clone https://github.com/YOUR_USERNAME/isp-management-system.git
+cd isp-management-system
+
+# 2. Run auto setup
+chmod +x scripts/update.sh
+./scripts/update.sh
+
+# 3. Start with PM2
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup
+```
+
+### **Manual Linux Setup**
+```bash
+# Install dependencies
+npm install
+cd server && npm install && cd ..
+cd client && npm install && cd ..
+
+# Setup database
+cd server
+npx prisma generate
+npx prisma db push
+npx prisma db seed
+cd ..
+
+# Build for production
+cd client && npm run build && cd ..
+
+# Start services
+pm2 start ecosystem.config.js
 ```
 
 ## 📁 **Struktur Project**
@@ -61,13 +104,27 @@ isp-management-system/
 │   ├── 📁 routes/            # API routes
 │   ├── 📁 middleware/        # Express middleware
 │   ├── 📁 services/          # Business logic
+│   │   └── 📁 whatsapp/      # WhatsApp bot service
 │   ├── 📁 prisma/            # Database schema
+│   ├── 📁 utils/             # Utility functions
 │   └── 📁 uploads/           # File uploads
-├── 📁 scripts/               # Utility scripts
-│   ├── run-fresh-setup.bat   # Windows setup script
+├── 📁 docs/                  # 📚 Dokumentasi lengkap
+│   ├── README.md             # Index dokumentasi
+│   ├── LINUX_DEPLOYMENT_GUIDE.md # Panduan deploy Linux
+│   ├── SECURITY_CHECKLIST.md # Checklist keamanan
+│   └── ...                   # Dokumentasi lainnya
+├── 📁 scripts/               # 🛠️ Scripts & automation
+│   ├── 📁 batch/             # Batch files untuk Windows
+│   │   ├── start-all-production.bat
+│   │   ├── start-whatsapp.bat
+│   │   ├── stop-all.bat
+│   │   └── whatsapp-bot-integrated.js
+│   ├── update.sh             # Auto update script (Linux)
+│   ├── whatsapp-status.json  # WhatsApp bot status
 │   └── README.md             # Scripts documentation
-├── run-setup.bat             # Windows quick setup
-└── README.md                 # This file
+├── ecosystem.config.js       # PM2 configuration
+├── .gitignore               # Git ignore rules
+└── README.md                # This file
 ```
 
 ## 🔧 **Requirements**
@@ -117,8 +174,11 @@ RATE_LIMIT_MAX_REQUESTS=1000
 # File Upload
 MAX_FILE_SIZE=5242880
 
-# Telegram Bot (Optional)
-TELEGRAM_BOT_TOKEN="your-telegram-bot-token-here"
+# WhatsApp Bot Configuration
+WHATSAPP_ENABLED="true"
+WHATSAPP_ADMIN_NUMBER="628123456789"
+WHATSAPP_SESSION_NAME="isp-management-bot"
+WHATSAPP_AUTO_REPLY="true"
 ```
 
 ## 🛠️ **Development**
@@ -158,6 +218,8 @@ npx prisma generate        # Generate Prisma client
 ## 📚 **Documentation**
 
 - **[Scripts Guide](scripts/README.md)** - Panduan penggunaan scripts
+- **[WhatsApp Migration Guide](WHATSAPP_MIGRATION_GUIDE.md)** - Panduan migrasi ke WhatsApp Bot
+- **[Development Guide](scripts/LOCAL_DEV_GUIDE.md)** - Panduan development lokal
 
 ## 🔧 **Troubleshooting**
 

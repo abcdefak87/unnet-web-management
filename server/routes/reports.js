@@ -1,11 +1,11 @@
 const express = require('express');
 const { query, validationResult } = require('express-validator');
-const { PrismaClient } = require('@prisma/client');
+// PrismaClient imported from utils/database
 const { authenticateToken, requireRole, requirePermission } = require('../middleware/auth');
 const { PERMISSIONS } = require('../utils/permissions');
 
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = require('../utils/database');
 
 // Dashboard statistics
 router.get('/dashboard', authenticateToken, requirePermission(PERMISSIONS.REPORTS_VIEW), async (req, res) => {
@@ -18,7 +18,36 @@ router.get('/dashboard', authenticateToken, requirePermission(PERMISSIONS.REPORT
     const totalTechnicians = await prisma.technician.count().catch(() => 0);
     const activeTechnicians = await prisma.technician.count({ where: { isActive: true } }).catch(() => 0);
     const totalCustomers = await prisma.customer.count().catch(() => 0);
-    const lowStockItems = await prisma.item.count({ where: { quantity: { lte: 10 } } }).catch(() => 0);
+    const lowStockItems = await prisma.item.count({ where: { currentStock: { lte: 10 } } }).catch(() => 0);
+    
+    // New ticket system statistics
+    const psbPending = await prisma.job.count({ 
+      where: { 
+        category: 'PSB', 
+        status: { in: ['OPEN', 'ASSIGNED', 'IN_PROGRESS'] } 
+      } 
+    }).catch(() => 0);
+    
+    const psbCompleted = await prisma.job.count({ 
+      where: { 
+        category: 'PSB', 
+        status: 'COMPLETED' 
+      } 
+    }).catch(() => 0);
+    
+    const gangguanPending = await prisma.job.count({ 
+      where: { 
+        category: 'GANGGUAN', 
+        status: { in: ['OPEN', 'ASSIGNED', 'IN_PROGRESS'] } 
+      } 
+    }).catch(() => 0);
+    
+    const gangguanCompleted = await prisma.job.count({ 
+      where: { 
+        category: 'GANGGUAN', 
+        status: 'COMPLETED' 
+      } 
+    }).catch(() => 0);
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -68,7 +97,12 @@ router.get('/dashboard', authenticateToken, requirePermission(PERMISSIONS.REPORT
           totalCustomers,
           lowStockItems,
           todayJobs,
-          thisMonthJobs
+          thisMonthJobs,
+          // New ticket system stats
+          psbPending,
+          psbCompleted,
+          gangguanPending,
+          gangguanCompleted
         },
         recentJobs,
         topTechnicians: technicianStats

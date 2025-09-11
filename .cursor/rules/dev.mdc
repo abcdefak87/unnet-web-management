@@ -1,0 +1,53 @@
+---
+description: Guidelines for conducting effective code reviews that improve code quality and team collaboration.
+globs:
+  - "**/*.js"
+  - "**/*.jsx"
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.py"
+  - "**/*.java"
+  - "**/*.swift"
+  - "**/*.dart"
+  - "**/*.go"
+  - "**/*.rb"
+  - "**/*.php"
+  - "**/*.cs"
+  - "**/*.md"
+alwaysApply: true
+---
+
+# Code Review Best Practices
+
+## Core Philosophy
+- Conduct thorough, constructive code reviews that improve code quality and share knowledge
+- Balance thorough examination with timely feedback to support development velocity
+- Focus on the code, not the person; provide specific, actionable feedback
+
+## Review Process
+- **Preparation**: Understand the context, requirements, and scope before beginning the review
+- **Systematic Examination**: Check code style, business logic, error handling, tests, and documentation
+- **Clear Communication**: Provide specific examples, explain reasoning, and distinguish *must-fix* issues from suggestions
+- **Follow-through**: Verify that feedback is addressed and acknowledge good practices
+- **Timely Response**: Provide prompt feedback to avoid blocking team progress
+
+## Technical Focus Areas
+- **Code Quality**: Verify adherence to coding standards, naming conventions, and architectural patterns
+- **Security Review**: Identify potential vulnerabilities, validate inputs, check authentication/authorization
+- **Performance Analysis**: Assess algorithmic complexity, database queries, and resource usage
+- **Test Coverage**: Ensure appropriate unit, integration, and end-to-end test coverage
+- **Documentation**: Confirm that code changes include comments, README updates, and API documentation
+
+## Platform-Specific Reviews
+- **Frontend**: Review component architecture, state management, accessibility, and user experience considerations
+- **Backend**: Examine API design, database interactions, caching strategies, and service integrations
+- **Mobile**: Assess platform-specific optimizations, performance impacts, and user interface guidelines
+- **DevOps**: Review infrastructure changes, deployment configurations, and monitoring implementations
+- **Database**: Analyze query performance, schema changes, and migration strategies
+
+## Communication Guidelines
+- Use reviews as opportunities to learn, teach, and align on team practices
+- Engage in discussion, ask clarifying questions, and remain open to alternative solutions
+- Provide specific feedback on code improvements and suggest alternative approaches
+- Share best practices and help maintain consistent quality standards across the codebase
+- Foster a collaborative development environment through constructive feedback

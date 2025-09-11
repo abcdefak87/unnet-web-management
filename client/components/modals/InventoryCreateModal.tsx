@@ -206,7 +206,7 @@ export default function InventoryCreateModal({ isOpen, onClose, onSuccess }: Inv
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-1">
-              Untuk modem, gunakan fitur "Scan Masuk" (tombol biru)
+              Untuk modem, gunakan fitur &quot;Scan Masuk&quot; (tombol biru)
             </p>
           </div>
 

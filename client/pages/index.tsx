@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useRouter } from 'next/router'
+import { useRouter } from '../lib/router'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Home() {

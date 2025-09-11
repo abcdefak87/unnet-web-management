@@ -14,15 +14,16 @@ uploadDirs.forEach(dir => {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     let uploadPath = 'uploads/';
-    
-    if (req.route.path.includes('/jobs')) {
+
+    const base = (req.baseUrl || '').toLowerCase();
+    if (base.startsWith('/api/jobs')) {
       uploadPath += 'jobs/';
-    } else if (req.route.path.includes('/customers')) {
+    } else if (base.startsWith('/api/customers')) {
       uploadPath += 'customers/';
-    } else if (req.route.path.includes('/reports')) {
+    } else if (base.startsWith('/api/reports')) {
       uploadPath += 'reports/';
     }
-    
+
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
@@ -104,25 +105,8 @@ const validateUploadedFiles = (req, res, next) => {
 
   // Additional file validation
   for (const file of req.files) {
-    // Check file size
     if (file.size === 0) {
       return res.status(400).json({ error: 'Empty files are not allowed' });
-    }
-
-    // Check for suspicious content (basic check)
-    if (file.buffer) {
-      // Check for executable signatures
-      const executableSignatures = [
-        Buffer.from([0x4D, 0x5A]), // PE executable
-        Buffer.from([0x7F, 0x45, 0x4C, 0x46]), // ELF executable
-        Buffer.from([0xFE, 0xED, 0xFA, 0xCE]), // Mach-O executable
-      ];
-
-      for (const signature of executableSignatures) {
-        if (file.buffer.subarray(0, signature.length).equals(signature)) {
-          return res.status(400).json({ error: 'Executable files are not allowed' });
-        }
-      }
     }
   }
 

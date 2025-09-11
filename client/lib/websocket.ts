@@ -1,5 +1,6 @@
 // @ts-ignore - socket.io-client types will be installed
 import { io, Socket } from 'socket.io-client';
+import Cookies from 'js-cookie';
 
 class WebSocketService {
   private socket: Socket | null = null;
@@ -23,11 +24,10 @@ class WebSocketService {
     this.isConnecting = true;
 
     try {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
-        (typeof window !== 'undefined' && process.env.NODE_ENV === 'production' 
-          ? window.location.origin 
-          : 'http://localhost:3001');
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
       
+      const token = Cookies.get('token');
+
       this.socket = io(wsUrl, {
         transports: ['websocket', 'polling'],
         timeout: 20000,
@@ -36,7 +36,9 @@ class WebSocketService {
         reconnectionAttempts: this.maxReconnectAttempts,
         reconnectionDelay: this.reconnectDelay,
         reconnectionDelayMax: 10000,
-        autoConnect: true
+        autoConnect: true,
+        auth: token ? { token } : undefined,
+        extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined
       });
 
       this.socket.on('connect', () => {
@@ -44,8 +46,8 @@ class WebSocketService {
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         
-        // Join user rooms
-        this.socket?.emit('join-room', { userId, role });
+        // Join user rooms (server derives identity from token)
+        this.socket?.emit('join-room');
         
         // Start heartbeat
         this.startHeartbeat();
@@ -137,6 +139,10 @@ class WebSocketService {
     this.socket?.on('user-notification', callback);
   }
 
+  onWhatsAppStatusUpdate(callback: (data: any) => void) {
+    this.socket?.on('whatsapp-status-update', callback);
+  }
+
   // Remove event listeners
   offJobUpdate(callback: (data: any) => void) {
     this.socket?.off('job-update', callback);
@@ -156,6 +162,10 @@ class WebSocketService {
 
   offUserNotification(callback: (data: any) => void) {
     this.socket?.off('user-notification', callback);
+  }
+
+  offWhatsAppStatusUpdate(callback: (data: any) => void) {
+    this.socket?.off('whatsapp-status-update', callback);
   }
 }
 

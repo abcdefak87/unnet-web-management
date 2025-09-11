@@ -44,7 +44,7 @@ export default function Profile() {
     try {
       // Validate password confirmation if changing password
       if (formData.newPassword && formData.newPassword !== formData.confirmPassword) {
-        throw new Error('New passwords do not match')
+        throw new Error('Password baru tidak cocok')
       }
 
       const updateData: any = {
@@ -143,11 +143,11 @@ export default function Profile() {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Basic Information */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Informasi Dasar</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                      Full Name
+                      Nama Lengkap
                     </label>
                     <input
                       type="text"
@@ -159,12 +159,12 @@ export default function Profile() {
                       className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
                         !isEditing ? 'bg-gray-50 text-gray-500' : 'bg-white'
                       }`}
-                      placeholder="Enter your full name"
+                      placeholder="Masukkan nama lengkap Anda"
                     />
                   </div>
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                      Email Address
+                      Alamat Email
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -178,7 +178,7 @@ export default function Profile() {
                         className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
                           !isEditing ? 'bg-gray-50 text-gray-500' : 'bg-white'
                         }`}
-                        placeholder="Enter your email address"
+                        placeholder="Masukkan alamat email Anda"
                       />
                     </div>
                   </div>
@@ -188,11 +188,11 @@ export default function Profile() {
               {/* Password Section */}
               {isEditing && (
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Ubah Password</h3>
                   <div className="space-y-4">
                     <div>
                       <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                        Current Password
+                        Password Saat Ini
                       </label>
                       <div className="relative">
                         <input
@@ -202,7 +202,7 @@ export default function Profile() {
                           value={formData.currentPassword}
                           onChange={handleInputChange}
                           className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                          placeholder="Enter current password"
+                          placeholder="Masukkan password saat ini"
                         />
                         <button
                           type="button"
@@ -216,7 +216,7 @@ export default function Profile() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                          New Password
+                          Password Baru
                         </label>
                         <input
                           type={showPassword ? 'text' : 'password'}
@@ -225,12 +225,12 @@ export default function Profile() {
                           value={formData.newPassword}
                           onChange={handleInputChange}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                          placeholder="Enter new password"
+                          placeholder="Masukkan password baru"
                         />
                       </div>
                       <div>
                         <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                          Confirm New Password
+                          Konfirmasi Password Baru
                         </label>
                         <input
                           type={showPassword ? 'text' : 'password'}
@@ -239,7 +239,7 @@ export default function Profile() {
                           value={formData.confirmPassword}
                           onChange={handleInputChange}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                          placeholder="Confirm new password"
+                          placeholder="Konfirmasi password baru"
                         />
                       </div>
                     </div>
@@ -257,7 +257,7 @@ export default function Profile() {
                       className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
                     >
                       <User className="h-4 w-4 mr-2" />
-                      Edit Profile
+                      Edit Profil
                     </button>
                   ) : (
                     <div className="flex space-x-3">
@@ -267,7 +267,7 @@ export default function Profile() {
                         className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Save className="h-4 w-4 mr-2" />
-                        {loading ? 'Saving...' : 'Save Changes'}
+                        {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
                       </button>
                       <button
                         type="button"
@@ -285,7 +285,7 @@ export default function Profile() {
                         }}
                         className="inline-flex items-center px-6 py-3 border border-gray-300 text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
                       >
-                        Cancel
+                        Batal
                       </button>
                     </div>
                   )}

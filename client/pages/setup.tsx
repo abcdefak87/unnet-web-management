@@ -49,7 +49,7 @@ export default function Setup() {
       setSetupNeeded(true);
     } catch (error) {
       console.error('Failed to check setup status:', error);
-      setError('Failed to check setup status');
+      setError('Gagal memeriksa status setup');
     } finally {
       setLoading(false);
     }
@@ -70,17 +70,17 @@ export default function Setup() {
 
     // Validation
     if (!formData.name || !formData.username || !formData.password || !formData.role) {
-      setError('Please fill in all required fields');
+      setError('Silakan isi semua field yang diperlukan');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      setError('Password tidak cocok');
       return;
     }
 
     if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters long');
+      setError('Password harus minimal 8 karakter');
       return;
     }
 
@@ -103,10 +103,10 @@ export default function Setup() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create user');
+        throw new Error(data.error || 'Gagal membuat user');
       }
 
-      setSuccess('User created successfully! Redirecting to login...');
+      setSuccess('User berhasil dibuat! Mengarahkan ke login...');
       
       // Redirect to login after 2 seconds
       setTimeout(() => {
@@ -114,7 +114,7 @@ export default function Setup() {
       }, 2000);
 
     } catch (error: any) {
-      setError(error.message || 'Failed to create user');
+      setError(error.message || 'Gagal membuat user');
     } finally {
       setCreating(false);
     }
@@ -125,7 +125,7 @@ export default function Setup() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Checking setup status...</p>
+          <p className="mt-4 text-gray-600">Memeriksa status setup...</p>
         </div>
       </div>
     );
@@ -135,7 +135,7 @@ export default function Setup() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-600">Setup already completed. Redirecting...</p>
+          <p className="text-gray-600">Setup sudah selesai. Mengarahkan...</p>
         </div>
       </div>
     );
@@ -144,17 +144,17 @@ export default function Setup() {
   return (
     <>
       <Head>
-        <title>Setup User - ISP Management System</title>
+        <title>Setup User - Sistem Manajemen ISP</title>
       </Head>
       
       <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           <div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-              Setup User Account
+              Setup Akun User
             </h2>
             <p className="mt-2 text-center text-sm text-gray-600">
-              Create the first user account for your ISP Management System
+              Buat akun user pertama untuk Sistem Manajemen ISP Anda
             </p>
           </div>
           
@@ -162,7 +162,7 @@ export default function Setup() {
             <div className="rounded-md shadow-sm space-y-4">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                  Full Name *
+                  Nama Lengkap *
                 </label>
                 <input
                   id="name"
@@ -172,7 +172,7 @@ export default function Setup() {
                   value={formData.name}
                   onChange={handleInputChange}
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="Enter your full name"
+                  placeholder="Masukkan nama lengkap Anda"
                 />
               </div>
               
@@ -188,7 +188,7 @@ export default function Setup() {
                   value={formData.username}
                   onChange={handleInputChange}
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="Enter username for login"
+                  placeholder="Masukkan username untuk login"
                 />
               </div>
               
@@ -223,16 +223,16 @@ export default function Setup() {
                   value={formData.password}
                   onChange={handleInputChange}
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="Enter a strong password"
+                  placeholder="Masukkan password yang kuat"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Must be at least 8 characters with uppercase, lowercase, number, and special character
+                  Harus minimal 8 karakter dengan huruf besar, huruf kecil, angka, dan karakter khusus
                 </p>
               </div>
               
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                  Confirm Password *
+                  Konfirmasi Password *
                 </label>
                 <input
                   id="confirmPassword"
@@ -242,7 +242,7 @@ export default function Setup() {
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="Confirm your password"
+                  placeholder="Konfirmasi password Anda"
                 />
               </div>
             </div>
@@ -268,10 +268,10 @@ export default function Setup() {
                 {creating ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Creating User...
+                    Membuat User...
                   </>
                 ) : (
-                  'Create User Account'
+                  'Buat Akun User'
                 )}
               </button>
             </div>
@@ -279,7 +279,7 @@ export default function Setup() {
           
           <div className="text-center">
             <p className="text-xs text-gray-500">
-              This will create a user account with the selected role access
+              Ini akan membuat akun user dengan akses role yang dipilih
             </p>
           </div>
         </div>
