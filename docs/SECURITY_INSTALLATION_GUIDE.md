@@ -70,7 +70,7 @@ NODE_ENV=development
 
 # Security
 BCRYPT_SALT_ROUNDS=14
-CSRF_SECRET="your-csrf-secret-32-chars"
+CSRF_SECRET="35d0f41cfef6f221f1b7b2c3656603caedce81cd5c865f9c706dc04dcb3b8ffb"
 
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000
