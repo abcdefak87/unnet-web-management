@@ -94,9 +94,9 @@ PORT=3001
 # Database
 DATABASE_URL="file:./prisma/prod.db"
 
-# JWT Secrets (CHANGE THESE!)
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-JWT_REFRESH_SECRET=your-super-secret-refresh-key-change-this-in-production
+# JWT Secrets (SECRET BARU YANG AMAN - Generated 2025)
+JWT_SECRET=7657c1ef0831a49fefed171b28a4de1b2adb1e204e574b8264f378e6a3713febb4332f6e5b53e8ed8309880e7548c6409d88a522e05037e53d8e5bc0a49f3c33
+JWT_REFRESH_SECRET=24f853bad17bc5cf104b983c080a2795733708fd52059bf7dad9dfdf31b80ad94be07355d51a7c2b5a57bf12cb3cdda338c684d9e7aa96d7604adbe761bb01b6
 
 # CORS Configuration
 CORS_ORIGIN=http://localhost:3000
@@ -115,7 +115,7 @@ WHATSAPP_QR_PATH=./public/qr
 
 # Security
 BCRYPT_ROUNDS=10
-SESSION_SECRET=your-session-secret-change-this
+SESSION_SECRET=1a5c0f271af7fb8291a185f4fb24b12656aa40445097291c25c8865d8d984452
 
 # Logging
 LOG_LEVEL=info
@@ -160,8 +160,8 @@ npx prisma db seed
 NODE_ENV=production
 PORT=3001
 DATABASE_URL="file:./prisma/prod.db"
-JWT_SECRET=your-super-secret-jwt-key-here
-JWT_REFRESH_SECRET=your-super-secret-refresh-key-here
+JWT_SECRET=7657c1ef0831a49fefed171b28a4de1b2adb1e204e574b8264f378e6a3713febb4332f6e5b53e8ed8309880e7548c6409d88a522e05037e53d8e5bc0a49f3c33
+JWT_REFRESH_SECRET=24f853bad17bc5cf104b983c080a2795733708fd52059bf7dad9dfdf31b80ad94be07355d51a7c2b5a57bf12cb3cdda338c684d9e7aa96d7604adbe761bb01b6
 
 # WhatsApp Configuration
 WHATSAPP_SESSION_PATH=./auth_info_baileys

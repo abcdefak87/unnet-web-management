@@ -61,8 +61,8 @@ done
 DATABASE_URL="file:./dev.db"
 
 # JWT Configuration (GANTI DENGAN SECRET YANG AMAN!)
-JWT_SECRET="your-super-secure-jwt-secret-64-chars"
-JWT_REFRESH_SECRET="your-super-secure-refresh-secret-64-chars"
+JWT_SECRET="7657c1ef0831a49fefed171b28a4de1b2adb1e204e574b8264f378e6a3713febb4332f6e5b53e8ed8309880e7548c6409d88a522e05037e53d8e5bc0a49f3c33"
+JWT_REFRESH_SECRET="24f853bad17bc5cf104b983c080a2795733708fd52059bf7dad9dfdf31b80ad94be07355d51a7c2b5a57bf12cb3cdda338c684d9e7aa96d7604adbe761bb01b6"
 
 # Server
 PORT=3001
